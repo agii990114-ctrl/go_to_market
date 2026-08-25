@@ -15,6 +15,7 @@ import 'dotenv/config';
 import { judge, generateWords } from '../server/agents.js';
 import { cleanWord, isUsableWord, normalize } from '../server/game.js';
 import { isRealWord } from '../server/dictionary.js';
+import { clearVerdictCache } from '../server/verdict-cache.js';
 
 /* 통과해야 하는 것 */
 const SHOULD_PASS = [
@@ -26,6 +27,8 @@ const SHOULD_PASS = [
     // 실제로 억울하게 탈락했던 것들. 다시는 떨어지면 안 된다.
     ['냉장고', '고기'], ['냉장고', '우유'], ['냉장고', '반찬'], ['냉장고', '얼음'],
     ['시장', '향신료'], ['시장', '상인'], ['시장', '지갑'],
+    // "정반대는 탈락" 규칙 때문에 계절 단어가 과하게 걸리지 않는지 지킨다
+    ['여름', '빙수'], ['여름', '에어컨'], ['겨울', '장갑'], ['겨울', '눈사람'],
 ];
 
 /* 탈락해야 하는 것 */
@@ -33,7 +36,9 @@ const SHOULD_FAIL = [
     ['시장', '은하수'], ['시장', '미적분'], ['시장', 'asdfgh'],
     ['동물원', '주식배당금'], ['냉장고', '화산폭발'], ['냉장고', 'ㅁㄴㅇㄹ'],
     ['바다', '프린터'], ['병원', '용암'],
-    ['학교', '심해어'], ['여름', '눈사람'],
+    ['학교', '심해어'],
+    // 무관이 아니라 정반대라 탈락해야 하는 것들
+    ['여름', '눈사람'], ['여름', '털장갑'], ['냉장고', '화로'],
 ];
 
 /* 정답을 정하지 않고 일관성만 보는 것 */
@@ -69,9 +74,13 @@ async function benchJudge(model) {
         else wrong.fail.push(`${topic}/${word}`);
     }
 
+    // 판정 캐시가 켜져 있으면 두 번째 질문은 무조건 같은 답이라 일관성이 100% 로 나온다.
+    // 그건 캐시를 재는 것이지 모델을 재는 게 아니다. 사이사이 캐시를 비운다.
     let consistent = 0;
     for (const [topic, word] of AMBIGUOUS) {
+        clearVerdictCache();
         const a = await timed(() => judge(topic, word));
+        clearVerdictCache();
         const b = await timed(() => judge(topic, word));
         times.push(a.ms, b.ms);
         if (a.error || b.error) errors.push(`${topic}/${word}: ${(a.error || b.error).slice(0, 50)}`);
