@@ -1,0 +1,18 @@
+{
+  "name": "go_to_market",
+  "version": "1.0.0",
+  "description": "시장에 가면 - AI 대결 버전",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "mock": "node server/start-mock.js",
+    "bench": "node bench/run.js",
+    "setup:dict": "node scripts/fetch-dict.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0"
+  }
+}

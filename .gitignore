@@ -1,0 +1,6 @@
+node_modules/
+.env
+*.log
+
+# `npm run setup:dict` 로 받는 단어 목록 (4MB)
+data/

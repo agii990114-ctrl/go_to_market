@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>시장에 가면 - 기억력 게임</title>
+    <link rel="stylesheet" href="../css/common.css">
+    <style>
+        /* -----------------------------------------
+           색상 토큰 : 기본은 라이트 테마
+           다크 테마는 html.dark-theme 에서 값만 덮어쓴다
+        ----------------------------------------- */
+        :root {
+            --bg-main: #f4f6fa;
+            --panel: #ffffff;
+            --panel-soft: #ffffff;
+            --border: rgba(15, 23, 42, 0.10);
+            --text: #1e293b;
+            --sub: #64748b;
+
+            --accent: #f59e0b;              /* 배경으로 칠할 때 */
+            --accent-text: #b45309;         /* 글씨로 쓸 때 (밝은 배경 대비 확보) */
+            --accent-deep: #d97706;
+            --accent-soft: rgba(245, 158, 11, 0.13);
+            --accent-line: rgba(245, 158, 11, 0.5);
+
+            --danger: #e11d48;
+            --ok: #16a34a;
+
+            --inset-bg: #f1f5f9;            /* 입력창, 점수칸 등 안쪽 면 */
+            --placeholder: #94a3b8;
+            --switch-off: #cbd5e1;
+            --chip-bg: #f1f5f9;
+
+            --missed-bg: rgba(225, 29, 72, 0.10);
+            --missed-border: rgba(225, 29, 72, 0.35);
+            --missed-text: #be123c;
+
+            --scrim: rgba(15, 23, 42, 0.35);
+            --scrim-strong: rgba(15, 23, 42, 0.5);
+
+            --shadow-card: 0 10px 26px rgba(15, 23, 42, 0.08);
+            --shadow-panel: 0 16px 40px rgba(15, 23, 42, 0.18);
+            --shadow-modal: 0 20px 50px rgba(15, 23, 42, 0.25);
+            --shadow-accent: 0 6px 18px rgba(245, 158, 11, 0.35);
+            --text-shadow: none;
+        }
+
+        html.dark-theme {
+            --bg-main: #0f172a;
+            --panel: #1e293b;
+            --panel-soft: rgba(30, 41, 59, 0.75);
+            --border: rgba(255, 255, 255, 0.08);
+            --text: #f1f5f9;
+            --sub: #94a3b8;
+
+            --accent: #f59e0b;
+            --accent-text: #f59e0b;
+            --accent-deep: #d97706;
+            --accent-soft: rgba(245, 158, 11, 0.15);
+            --accent-line: rgba(245, 158, 11, 0.45);
+
+            --danger: #f43f5e;
+            --ok: #22c55e;
+
+            --inset-bg: rgba(15, 23, 42, 0.6);
+            --placeholder: #475569;
+            --switch-off: #334155;
+            --chip-bg: rgba(148, 163, 184, 0.12);
+
+            --missed-bg: rgba(244, 63, 94, 0.16);
+            --missed-border: rgba(244, 63, 94, 0.5);
+            --missed-text: #fda4af;
+
+            --scrim: rgba(0, 0, 0, 0.55);
+            --scrim-strong: rgba(0, 0, 0, 0.7);
+
+            --shadow-card: 0 12px 30px rgba(0, 0, 0, 0.3);
+            --shadow-panel: 0 16px 40px rgba(0, 0, 0, 0.5);
+            --shadow-modal: 0 20px 50px rgba(0, 0, 0, 0.6);
+            --shadow-accent: 0 6px 18px rgba(245, 158, 11, 0.25);
+            --text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            width: 100%;
+            min-height: 100dvh;
+            background-color: var(--bg-main);
+        }
+
+        body {
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: calc(12px + env(safe-area-inset-top)) 14px calc(20px + env(safe-area-inset-bottom)) 14px;
+            position: relative;
+            overflow-x: hidden;
+            transition: background-color 0.25s ease, color 0.25s ease;
+        }
+
+        /* -----------------------------------------
+           헤더 : 홈 버튼 / 타이틀 / 설정 버튼
+        ----------------------------------------- */
+        header {
+            width: 100%;
+            max-width: 460px;
+            flex-shrink: 0;
+        }
+
+        .top_box {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            width: 100%;
+            height: 40px;
+        }
+
+        h1 {
+            font-size: clamp(1.05rem, 4.8vw, 1.25rem);
+            font-weight: 800;
+            letter-spacing: 2px;
+            color: var(--text);
+            text-shadow: var(--text-shadow);
+        }
+
+        .home_ic {
+            color: var(--sub) !important;
+            text-decoration: none;
+            position: absolute;
+            left: 0;
+            font-size: 1.3rem;
+            cursor: pointer;
+            padding: 5px 8px;
+            margin-right: 0;
+        }
+
+        .btn-icon {
+            position: absolute;
+            right: 0;
+            background: var(--panel);
+            color: var(--sub);
+            border: 1px solid var(--border);
+            padding: 6px 11px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: transform 0.2s ease, background-color 0.25s ease;
+        }
+
+        .btn-icon:active {
+            transform: scale(0.94);
+        }
+
+        /* -----------------------------------------
+           공통 화면 / 입력 / 버튼
+        ----------------------------------------- */
+        .screen {
+            width: 100%;
+            max-width: 460px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 22px;
+            margin-top: 34px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .text-input {
+            width: 100%;
+            background-color: var(--inset-bg);
+            border: 2px solid var(--border);
+            border-radius: 14px;
+            color: var(--text);
+            font-size: 1.15rem;
+            font-weight: 700;
+            text-align: center;
+            padding: 15px 14px;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.25s ease;
+        }
+
+        .text-input::placeholder {
+            color: var(--placeholder);
+            font-weight: 500;
+        }
+
+        .text-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px var(--accent-soft);
+        }
+
+        .text-input.flash-ok {
+            border-color: var(--ok);
+            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);
+        }
+
+        .text-input.shake {
+            animation: shake 0.35s ease;
+            border-color: var(--danger);
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-8px); }
+            40% { transform: translateX(8px); }
+            60% { transform: translateX(-5px); }
+            80% { transform: translateX(5px); }
+        }
+
+        .btn {
+            background: var(--panel);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 12px 22px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: var(--shadow-card);
+            transition: transform 0.2s ease, background-color 0.25s ease, color 0.25s ease;
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+            color: #422006;
+            border: none;
+            width: 100%;
+            padding: 15px;
+            font-size: 1rem;
+            box-shadow: var(--shadow-accent);
+        }
+
+        /* -----------------------------------------
+           시작 화면
+        ----------------------------------------- */
+        .start-card {
+            width: 100%;
+            background: var(--panel-soft);
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            padding: 32px 22px 26px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 18px;
+            box-shadow: var(--shadow-card);
+            transition: background-color 0.25s ease;
+        }
+
+        .start-emoji {
+            font-size: 3.4rem;
+        }
+
+        .start-desc {
+            color: var(--sub);
+            font-size: 0.88rem;
+            line-height: 1.7;
+            text-align: center;
+            word-break: keep-all;
+        }
+
+        .start-desc b {
+            color: var(--accent-text);
+        }
+
+        .field-label {
+            width: 100%;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--accent-text);
+            letter-spacing: 1px;
+            margin-bottom: -8px;
+        }
+
+        /* -----------------------------------------
+           플레이 화면
+        ----------------------------------------- */
+        .topic-banner {
+            width: 100%;
+            background: var(--accent-soft);
+            border: 1px dashed var(--accent-line);
+            border-radius: 16px;
+            padding: 14px 16px;
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: 800;
+            word-break: keep-all;
+        }
+
+        #topic-label {
+            color: var(--accent-text);
+        }
+
+        .topic-suffix {
+            color: var(--sub);
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .counter-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .counter-main {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+        }
+
+        #word-index {
+            font-size: 3.6rem;
+            font-weight: 900;
+            line-height: 1;
+            color: var(--text);
+            text-shadow: var(--text-shadow);
+        }
+
+        .counter-unit {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--sub);
+        }
+
+        .phase-hint {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--sub);
+            letter-spacing: 0.5px;
+        }
+
+        .phase-hint.is-new {
+            color: var(--accent-text);
+        }
+
+        /* 타이머 게이지 */
+        #timer-wrap {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .timer-track {
+            flex: 1;
+            height: 8px;
+            background: var(--inset-bg);
+            border: 1px solid var(--border);
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        #timer-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, var(--accent), #fbbf24);
+            border-radius: 99px;
+            transition: background 0.3s ease;
+        }
+
+        #timer-fill.urgent {
+            background: linear-gradient(90deg, var(--danger), #fb7185);
+        }
+
+        #timer-text {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--sub);
+            width: 32px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .input-row {
+            width: 100%;
+            display: flex;
+            gap: 8px;
+        }
+
+        .input-row .text-input {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .btn-enter {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            color: var(--accent-text);
+            border-radius: 14px;
+            padding: 0 18px;
+            font-size: 1.2rem;
+            font-weight: 800;
+            cursor: pointer;
+            flex-shrink: 0;
+            box-shadow: var(--shadow-card);
+        }
+
+        .btn-enter:active {
+            transform: scale(0.95);
+        }
+
+        .feedback {
+            font-size: 0.85rem;
+            font-weight: 700;
+            min-height: 20px;
+            text-align: center;
+            word-break: keep-all;
+        }
+
+        .feedback.ok { color: var(--ok); }
+        .feedback.warn { color: var(--accent-text); }
+
+        /* -----------------------------------------
+           설정 패널
+        ----------------------------------------- */
+        .overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: var(--scrim);
+            z-index: 50;
+        }
+
+        .overlay.open {
+            display: block;
+        }
+
+        .settings-panel {
+            position: fixed;
+            top: -520px;
+            left: 12px;
+            right: 12px;
+            max-width: 440px;
+            margin: 0 auto;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 20px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            box-shadow: var(--shadow-panel);
+            transition: top 0.32s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.25s ease;
+        }
+
+        .settings-panel.open {
+            top: calc(20px + env(safe-area-inset-top));
+        }
+
+        .settings-title {
+            font-size: 1rem;
+            font-weight: 800;
+            color: var(--accent-text);
+            letter-spacing: 1px;
+        }
+
+        .settings-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .settings-label {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .settings-desc {
+            font-size: 0.72rem;
+            color: var(--sub);
+            line-height: 1.5;
+            margin-top: 3px;
+            word-break: keep-all;
+        }
+
+        /* 테마 선택 (라이트 / 다크) */
+        .seg {
+            display: flex;
+            gap: 2px;
+            background: var(--inset-bg);
+            border: 1px solid var(--border);
+            padding: 3px;
+            border-radius: 20px;
+            flex-shrink: 0;
+        }
+
+        .seg-btn {
+            background: none;
+            border: none;
+            color: var(--sub);
+            padding: 6px 13px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            border-radius: 15px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .seg-btn.active {
+            background-color: var(--accent);
+            color: #422006;
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35);
+        }
+
+        /* 토글 스위치 */
+        .switch {
+            position: relative;
+            width: 50px;
+            height: 28px;
+            flex-shrink: 0;
+            border-radius: 99px;
+            background: var(--switch-off);
+            border: none;
+            cursor: pointer;
+            transition: background 0.25s ease;
+        }
+
+        .switch.on {
+            background: var(--accent);
+        }
+
+        .switch::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.3);
+            transition: left 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .switch.on::after {
+            left: 25px;
+        }
+
+        .sec-input {
+            width: 92px;
+            background-color: var(--inset-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            font-size: 0.95rem;
+            font-weight: 700;
+            text-align: center;
+            padding: 9px 8px;
+            outline: none;
+            flex-shrink: 0;
+        }
+
+        .sec-input:focus {
+            border-color: var(--accent);
+        }
+
+        .settings-row.disabled {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        .settings-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 4px;
+        }
+
+        .settings-actions .btn {
+            flex: 1;
+            box-shadow: none;
+            background: var(--inset-bg);
+        }
+
+        .btn-apply {
+            background: var(--accent) !important;
+            color: #422006;
+            border: none;
+        }
+
+        /* -----------------------------------------
+           결과 모달
+        ----------------------------------------- */
+        .modal-back {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: var(--scrim-strong);
+            z-index: 200;
+            padding: 20px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-back.open {
+            display: flex;
+        }
+
+        .modal {
+            width: 100%;
+            max-width: 420px;
+            max-height: 86dvh;
+            overflow-y: auto;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            padding: 26px 22px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+            box-shadow: var(--shadow-modal);
+        }
+
+        .modal-emoji {
+            font-size: 2.8rem;
+        }
+
+        .modal-title {
+            font-size: 1.2rem;
+            font-weight: 800;
+        }
+
+        .modal-reason {
+            font-size: 0.88rem;
+            color: var(--sub);
+            text-align: center;
+            line-height: 1.7;
+            word-break: keep-all;
+        }
+
+        .modal-reason b {
+            color: var(--danger);
+        }
+
+        .score-row {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .score-cell {
+            flex: 1;
+            background: var(--inset-bg);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 12px 8px;
+            text-align: center;
+        }
+
+        .score-cell .cap {
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--sub);
+            letter-spacing: 1px;
+        }
+
+        .score-cell .val {
+            font-size: 1.6rem;
+            font-weight: 900;
+            color: var(--accent-text);
+            margin-top: 2px;
+        }
+
+        .reveal-title {
+            width: 100%;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--sub);
+            letter-spacing: 1px;
+            margin-top: 4px;
+        }
+
+        .word-list {
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            max-height: 170px;
+            overflow-y: auto;
+            padding: 12px;
+            background: var(--inset-bg);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+        }
+
+        .word-chip {
+            background: var(--chip-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 6px 10px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            word-break: break-all;
+        }
+
+        .word-chip .no {
+            color: var(--sub);
+            font-size: 0.7rem;
+            margin-right: 5px;
+        }
+
+        .word-chip.missed {
+            background: var(--missed-bg);
+            border-color: var(--missed-border);
+            color: var(--missed-text);
+        }
+
+        .empty-note {
+            color: var(--sub);
+            font-size: 0.8rem;
+        }
+
+        @media (max-height: 640px) {
+            .screen { margin-top: 18px; gap: 16px; }
+            #word-index { font-size: 2.8rem; }
+            .start-card { padding: 24px 20px 22px; gap: 14px; }
+            .start-emoji { font-size: 2.6rem; }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- 설정 패널이 열렸을 때 뒤를 덮는 반투명 배경 -->
+    <div class="overlay" id="overlay" onclick="closeSettings()"></div>
+
+    <!-- 설정 패널 : 테마 / 제한 시간 사용 여부 / 입력 1개당 제한 초 -->
+    <div class="settings-panel" id="settings-panel">
+        <div class="settings-title">⚙️ 게임 설정</div>
+
+        <div class="settings-row">
+            <div>
+                <div class="settings-label">🎨 화면 테마</div>
+                <div class="settings-desc">고르는 순간 바로 미리 보여드려요.</div>
+            </div>
+            <div class="seg">
+                <button class="seg-btn" id="theme-light" onclick="pickTheme('light')">라이트</button>
+                <button class="seg-btn" id="theme-dark" onclick="pickTheme('dark')">다크</button>
+            </div>
+        </div>
+
+        <div class="settings-row">
+            <div>
+                <div class="settings-label">⏱️ 제한 시간 사용</div>
+                <div class="settings-desc">끄면 시간 압박 없이 천천히 즐길 수 있어요.</div>
+            </div>
+            <button class="switch" id="timer-switch" onclick="toggleTimerSwitch()"></button>
+        </div>
+
+        <div class="settings-row" id="sec-row">
+            <div>
+                <div class="settings-label">🕒 입력 1개당 제한 초</div>
+                <div class="settings-desc">단어 하나를 입력할 때마다 주어지는 시간 (1 ~ 60초)</div>
+            </div>
+            <input class="sec-input" id="sec-input" type="number" min="1" max="60" step="1" value="5">
+        </div>
+
+        <div class="settings-actions">
+            <button class="btn" onclick="closeSettings()">취소</button>
+            <button class="btn btn-apply" onclick="applySettings()">저장</button>
+        </div>
+    </div>
+
+    <header>
+        <div class="top_box">
+            <a href="../../index.html" class="home_ic">⬅</a>
+            <h1>시장에 가면</h1>
+            <button class="btn-icon" onclick="openSettings()">⚙️</button>
+        </div>
+    </header>
+
+    <!-- 1. 시작 화면 : 주제를 직접 정한다 -->
+    <main class="screen" id="start-screen">
+        <div class="start-card">
+            <div class="start-emoji">🛒</div>
+            <p class="start-desc">
+                주제를 정하고 단어를 하나씩 이어 붙여 보세요.<br>
+                앞에서 넣은 단어를 <b>순서대로 다시 입력</b>한 뒤<br>
+                새 단어를 하나 추가하면 됩니다.
+            </p>
+            <div class="field-label">주제</div>
+            <input class="text-input" id="topic-input" type="text" maxlength="20" placeholder="예) 시장, 동물원, 냉장고"
+                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            <button class="btn btn-primary" onclick="startNewGame()">게임 시작</button>
+        </div>
+    </main>
+
+    <!-- 2. 플레이 화면 : 주제 / 몇 번째 단어인지 / 입력창 / 새 게임 -->
+    <main class="screen hidden" id="play-screen">
+        <div class="topic-banner">
+            <span id="topic-label">시장</span><span class="topic-suffix">에 가면~</span>
+        </div>
+
+        <div class="counter-box">
+            <div class="counter-main">
+                <span id="word-index">1</span>
+                <span class="counter-unit">번째 단어</span>
+            </div>
+            <div class="phase-hint" id="phase-hint">첫 단어를 입력하세요</div>
+        </div>
+
+        <div id="timer-wrap" class="hidden">
+            <div class="timer-track">
+                <div id="timer-fill"></div>
+            </div>
+            <div id="timer-text">5.0</div>
+        </div>
+
+        <div class="input-row">
+            <input class="text-input" id="word-input" type="text" maxlength="30" placeholder="단어 입력"
+                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            <button class="btn-enter" onclick="submitWord()">▶</button>
+        </div>
+
+        <div class="feedback" id="feedback"></div>
+
+        <button class="btn" onclick="restartGame()">🔄 새 게임</button>
+    </main>
+
+    <!-- 3. 게임 오버 모달 : 이때 비로소 단어 목록을 공개한다 -->
+    <div class="modal-back" id="result-modal">
+        <div class="modal">
+            <div class="modal-emoji">💥</div>
+            <div class="modal-title">게임 오버</div>
+            <div class="modal-reason" id="result-reason"></div>
+
+            <div class="score-row">
+                <div class="score-cell">
+                    <div class="cap">기록</div>
+                    <div class="val" id="result-score">0</div>
+                </div>
+                <div class="score-cell">
+                    <div class="cap">최고 기록</div>
+                    <div class="val" id="result-best">0</div>
+                </div>
+            </div>
+
+            <div class="reveal-title">📜 내가 쌓았던 단어들</div>
+            <div class="word-list" id="result-words"></div>
+
+            <button class="btn btn-primary" onclick="restartGame()">새 게임</button>
+        </div>
+    </div>
+
+    <script>
+        /* =========================================
+           상태값
+           - words  : 내가 입력해 온 단어 목록 (플레이 중에는 절대 화면에 노출하지 않음)
+           - cursor : 이번 라운드에서 지금 입력할 차례인 위치 (0부터 시작)
+        ========================================= */
+        let words = [];
+        let cursor = 0;
+        let topic = '';
+        let isPlaying = false;
+        let lastMiss = null;   // 틀렸을 때 정보 { index, typed, answer }
+
+        // 설정값 (기본값 : 라이트 테마 / 제한 시간 꺼짐 / 입력 1개당 5초)
+        let settings = { timerEnabled: false, seconds: 5 };
+        let theme = 'light';
+
+        // 설정 패널에서 저장을 누르기 전까지의 임시값
+        let draftTimerEnabled = false;
+        let draftTheme = 'light';
+
+        // 타이머
+        let timerHandle = null;
+        let deadline = 0;
+
+        const SETTINGS_KEY = 'market_settings';
+        const BEST_KEY = 'market_bestRecord';
+        const THEME_KEY = 'theme';   // 숫자야구와 같은 키를 써서 테마를 함께 맞춘다
+
+        /* -----------------------------------------
+           테마
+        ----------------------------------------- */
+        function loadTheme() {
+            // 저장된 값이 없으면 라이트 테마로 시작한다
+            theme = (localStorage.getItem(THEME_KEY) === 'dark') ? 'dark' : 'light';
+            draftTheme = theme;
+            applyTheme(theme);
+        }
+
+        function applyTheme(value) {
+            document.documentElement.classList.toggle('dark-theme', value === 'dark');
+        }
+
+        // 설정 패널에서 테마를 고르면 저장 전에도 바로 미리 보여준다
+        function pickTheme(value) {
+            draftTheme = value;
+            applyTheme(value);
+            syncSettingsUI();
+        }
+
+        /* -----------------------------------------
+           설정 불러오기 / 저장
+        ----------------------------------------- */
+        function loadSettings() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+                if (saved && typeof saved === 'object') {
+                    settings.timerEnabled = !!saved.timerEnabled;
+                    const sec = parseInt(saved.seconds, 10);
+                    if (!isNaN(sec) && sec >= 1 && sec <= 60) settings.seconds = sec;
+                }
+            } catch (e) {
+                // 저장값이 깨져 있으면 기본값을 그대로 사용
+            }
+        }
+
+        function saveSettings() {
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+            localStorage.setItem(THEME_KEY, theme);
+        }
+
+        function openSettings() {
+            stopInputTimer();   // 설정을 보는 동안에는 시간이 흐르지 않게 멈춘다
+            draftTimerEnabled = settings.timerEnabled;
+            draftTheme = theme;
+            document.getElementById('sec-input').value = settings.seconds;
+            syncSettingsUI();
+            document.getElementById('settings-panel').classList.add('open');
+            document.getElementById('overlay').classList.add('open');
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-panel').classList.remove('open');
+            document.getElementById('overlay').classList.remove('open');
+
+            applyTheme(theme);   // 저장하지 않고 닫았다면 미리보기를 되돌린다
+
+            // 게임 중이면 제한 시간을 새로 채워 재개하고, 아니면 게이지를 감춘다
+            startInputTimer();
+            if (isPlaying) focusInput();
+        }
+
+        function toggleTimerSwitch() {
+            draftTimerEnabled = !draftTimerEnabled;
+            syncSettingsUI();
+        }
+
+        // 스위치 모양, 테마 선택 상태, 초 입력칸 활성화 여부를 화면에 반영
+        function syncSettingsUI() {
+            document.getElementById('timer-switch').classList.toggle('on', draftTimerEnabled);
+            document.getElementById('sec-row').classList.toggle('disabled', !draftTimerEnabled);
+            document.getElementById('theme-light').classList.toggle('active', draftTheme === 'light');
+            document.getElementById('theme-dark').classList.toggle('active', draftTheme === 'dark');
+        }
+
+        function applySettings() {
+            const parsed = parseInt(document.getElementById('sec-input').value, 10);
+            if (isNaN(parsed) || parsed < 1 || parsed > 60) {
+                alert('제한 시간은 1초 ~ 60초 사이로 입력해주세요.');
+                return;
+            }
+            settings.timerEnabled = draftTimerEnabled;
+            settings.seconds = parsed;
+            theme = draftTheme;
+            saveSettings();
+            closeSettings();   // 바뀐 설정으로 타이머가 여기서 다시 시작된다
+        }
+
+        /* -----------------------------------------
+           게임 진행
+        ----------------------------------------- */
+        function startNewGame() {
+            const input = document.getElementById('topic-input');
+            const value = input.value.trim();
+            if (!value) {
+                input.classList.add('shake');
+                setTimeout(() => input.classList.remove('shake'), 400);
+                input.focus();
+                return;
+            }
+
+            topic = value;
+            words = [];
+            cursor = 0;
+            lastMiss = null;
+            isPlaying = true;
+
+            document.getElementById('topic-label').innerText = topic;
+            document.getElementById('word-input').value = '';
+            document.getElementById('result-modal').classList.remove('open');
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('play-screen').classList.remove('hidden');
+
+            showFeedback('');
+            updateStatusUI();
+            startInputTimer();
+            focusInput();
+        }
+
+        // 새 게임 : 주제부터 다시 정할 수 있도록 시작 화면으로 되돌린다
+        function restartGame() {
+            if (isPlaying && words.length > 0) {
+                if (!confirm('진행 중인 게임을 끝내고 새로 시작할까요?')) return;
+            }
+            stopInputTimer();
+            isPlaying = false;
+            words = [];
+            cursor = 0;
+            lastMiss = null;
+
+            document.getElementById('result-modal').classList.remove('open');
+            document.getElementById('play-screen').classList.add('hidden');
+            document.getElementById('start-screen').classList.remove('hidden');
+
+            const topicInput = document.getElementById('topic-input');
+            topicInput.value = topic;
+            topicInput.focus();
+            topicInput.select();
+        }
+
+        // 비교용 정규화 : 앞뒤 공백 제거, 중간 공백은 하나로, 영문 대소문자 무시
+        function normalize(str) {
+            return str.trim().replace(/\s+/g, ' ').toLowerCase();
+        }
+
+        function submitWord() {
+            if (!isPlaying) return;
+
+            const input = document.getElementById('word-input');
+            const value = input.value.trim();
+
+            if (!value) {
+                shakeInput();
+                return;
+            }
+
+            // (1) 기억 확인 구간 : 앞서 넣었던 단어를 순서대로 다시 입력하는 중
+            if (cursor < words.length) {
+                if (normalize(value) === normalize(words[cursor])) {
+                    cursor++;
+                    input.value = '';
+                    flashOk();
+                    showFeedback('');
+                    updateStatusUI();
+                    startInputTimer();
+                } else {
+                    lastMiss = { index: cursor, typed: value, answer: words[cursor] };
+                    gameOver('wrong');
+                }
+                return;
+            }
+
+            // (2) 새 단어 추가 구간 : 이미 쓴 단어는 막아준다
+            if (words.some(w => normalize(w) === normalize(value))) {
+                showFeedback('이미 사용한 단어예요!', 'warn');
+                shakeInput();
+                input.select();
+                startInputTimer();
+                return;
+            }
+
+            words.push(value);
+            cursor = 0;
+            input.value = '';
+            flashOk();
+            showFeedback(words.length + '개 완성! 처음부터 다시 떠올려보세요', 'ok');
+            updateStatusUI();
+            startInputTimer();
+        }
+
+        // 지금 몇 번째 단어를 입력할 차례인지 화면에 표시
+        function updateStatusUI() {
+            const hint = document.getElementById('phase-hint');
+            document.getElementById('word-index').innerText = cursor + 1;
+
+            const isNewWord = cursor >= words.length;
+            hint.classList.toggle('is-new', isNewWord);
+
+            if (isNewWord) {
+                hint.innerText = words.length === 0 ? '✨ 첫 단어를 입력하세요' : '✨ 새 단어를 추가하세요';
+            } else {
+                hint.innerText = '기억을 떠올려 입력하세요';
+            }
+        }
+
+        function gameOver(reason) {
+            stopInputTimer();
+            isPlaying = false;
+
+            const score = words.length;
+            let best = parseInt(localStorage.getItem(BEST_KEY), 10);
+            if (isNaN(best)) best = 0;
+            if (score > best) {
+                best = score;
+                localStorage.setItem(BEST_KEY, best);
+            }
+
+            const reasonBox = document.getElementById('result-reason');
+            if (reason === 'timeout') {
+                reasonBox.innerHTML = '⏱️ <b>시간 초과</b>로 게임이 끝났습니다.<br>'
+                    + (cursor + 1) + '번째 단어를 입력하지 못했어요.';
+            } else {
+                reasonBox.innerHTML = (lastMiss.index + 1) + '번째 단어를 <b>' + escapeHtml(lastMiss.typed) + '</b>(으)로 입력했어요.<br>'
+                    + '정답은 <b>' + escapeHtml(lastMiss.answer) + '</b> 였습니다.';
+            }
+
+            document.getElementById('result-score').innerText = score;
+            document.getElementById('result-best').innerText = best;
+
+            // 숨겨두었던 단어 목록은 게임이 끝난 지금 공개한다
+            const listBox = document.getElementById('result-words');
+            if (words.length === 0) {
+                listBox.innerHTML = '<div class="empty-note">아직 쌓은 단어가 없어요.</div>';
+            } else {
+                listBox.innerHTML = words.map(function (w, i) {
+                    const missed = (reason === 'wrong' && lastMiss.index === i) ? ' missed' : '';
+                    return '<div class="word-chip' + missed + '"><span class="no">' + (i + 1) + '</span>' + escapeHtml(w) + '</div>';
+                }).join('');
+            }
+
+            document.getElementById('result-modal').classList.add('open');
+        }
+
+        // 입력한 단어를 그대로 화면에 넣기 전에 특수문자를 안전하게 바꿔준다
+        function escapeHtml(str) {
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+            return String(str).replace(/[&<>"']/g, function (ch) { return map[ch]; });
+        }
+
+        /* -----------------------------------------
+           입력 1개당 제한 시간
+        ----------------------------------------- */
+        function startInputTimer() {
+            stopInputTimer();
+
+            const wrap = document.getElementById('timer-wrap');
+            if (!settings.timerEnabled || !isPlaying) {
+                wrap.classList.add('hidden');
+                return;
+            }
+
+            wrap.classList.remove('hidden');
+            deadline = Date.now() + settings.seconds * 1000;
+            drawTimer();
+            timerHandle = setInterval(drawTimer, 50);
+        }
+
+        function stopInputTimer() {
+            if (timerHandle) {
+                clearInterval(timerHandle);
+                timerHandle = null;
+            }
+        }
+
+        function drawTimer() {
+            const remain = Math.max(0, deadline - Date.now());
+            const ratio = remain / (settings.seconds * 1000);
+            const fill = document.getElementById('timer-fill');
+
+            fill.style.width = (ratio * 100) + '%';
+            fill.classList.toggle('urgent', ratio <= 0.3);
+            document.getElementById('timer-text').innerText = (remain / 1000).toFixed(1);
+
+            if (remain <= 0) gameOver('timeout');
+        }
+
+        /* -----------------------------------------
+           입력창 보조 효과
+        ----------------------------------------- */
+        function focusInput() {
+            document.getElementById('word-input').focus();
+        }
+
+        function shakeInput() {
+            const input = document.getElementById('word-input');
+            input.classList.remove('shake');
+            void input.offsetWidth;   // 애니메이션을 다시 재생시키기 위한 리플로우
+            input.classList.add('shake');
+            setTimeout(() => input.classList.remove('shake'), 400);
+        }
+
+        function flashOk() {
+            const input = document.getElementById('word-input');
+            input.classList.add('flash-ok');
+            setTimeout(() => input.classList.remove('flash-ok'), 220);
+        }
+
+        function showFeedback(msg, type) {
+            const box = document.getElementById('feedback');
+            box.innerText = msg || '';
+            box.className = 'feedback' + (type ? ' ' + type : '');
+        }
+
+        /* -----------------------------------------
+           초기화
+        ----------------------------------------- */
+        // 엔터로 진행한다. form 을 쓰지 않아야 브라우저 입력 기록에 단어가 남지 않는다.
+        document.getElementById('word-input').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitWord();
+            }
+        });
+
+        document.getElementById('topic-input').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                startNewGame();
+            }
+        });
+
+        document.getElementById('sec-input').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                applySettings();
+            }
+        });
+
+        loadTheme();
+        loadSettings();
+        document.getElementById('topic-input').focus();
+    </script>
+</body>
+
+</html>

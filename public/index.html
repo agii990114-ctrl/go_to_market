@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>시장에 가면 - AI 대결</title>
+    <style>
+        /* -----------------------------------------
+           색상 토큰 : 기본은 라이트 테마
+           다크 테마는 html.dark-theme 에서 값만 덮어쓴다
+        ----------------------------------------- */
+        :root {
+            --bg-main: #f4f6fa;
+            --panel: #ffffff;
+            --panel-soft: #ffffff;
+            --border: rgba(15, 23, 42, 0.10);
+            --text: #1e293b;
+            --sub: #64748b;
+
+            --accent: #f59e0b;              /* 배경으로 칠할 때 */
+            --accent-text: #b45309;         /* 글씨로 쓸 때 (밝은 배경 대비 확보) */
+            --accent-deep: #d97706;
+            --accent-soft: rgba(245, 158, 11, 0.13);
+            --accent-line: rgba(245, 158, 11, 0.5);
+
+            --danger: #e11d48;
+            --ok: #16a34a;
+
+            --inset-bg: #f1f5f9;            /* 입력창, 점수칸 등 안쪽 면 */
+            --placeholder: #94a3b8;
+            --switch-off: #cbd5e1;
+            --chip-bg: #f1f5f9;
+
+            --missed-bg: rgba(225, 29, 72, 0.10);
+            --missed-border: rgba(225, 29, 72, 0.35);
+            --missed-text: #be123c;
+
+            --scrim: rgba(15, 23, 42, 0.35);
+            --scrim-strong: rgba(15, 23, 42, 0.5);
+
+            --shadow-card: 0 10px 26px rgba(15, 23, 42, 0.08);
+            --shadow-panel: 0 16px 40px rgba(15, 23, 42, 0.18);
+            --shadow-modal: 0 20px 50px rgba(15, 23, 42, 0.25);
+            --shadow-accent: 0 6px 18px rgba(245, 158, 11, 0.35);
+            --text-shadow: none;
+        }
+
+        html.dark-theme {
+            --bg-main: #0f172a;
+            --panel: #1e293b;
+            --panel-soft: rgba(30, 41, 59, 0.75);
+            --border: rgba(255, 255, 255, 0.08);
+            --text: #f1f5f9;
+            --sub: #94a3b8;
+
+            --accent: #f59e0b;
+            --accent-text: #f59e0b;
+            --accent-deep: #d97706;
+            --accent-soft: rgba(245, 158, 11, 0.15);
+            --accent-line: rgba(245, 158, 11, 0.45);
+
+            --danger: #f43f5e;
+            --ok: #22c55e;
+
+            --inset-bg: rgba(15, 23, 42, 0.6);
+            --placeholder: #475569;
+            --switch-off: #334155;
+            --chip-bg: rgba(148, 163, 184, 0.12);
+
+            --missed-bg: rgba(244, 63, 94, 0.16);
+            --missed-border: rgba(244, 63, 94, 0.5);
+            --missed-text: #fda4af;
+
+            --scrim: rgba(0, 0, 0, 0.55);
+            --scrim-strong: rgba(0, 0, 0, 0.7);
+
+            --shadow-card: 0 12px 30px rgba(0, 0, 0, 0.3);
+            --shadow-panel: 0 16px 40px rgba(0, 0, 0, 0.5);
+            --shadow-modal: 0 20px 50px rgba(0, 0, 0, 0.6);
+            --shadow-accent: 0 6px 18px rgba(245, 158, 11, 0.25);
+            --text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            width: 100%;
+            min-height: 100dvh;
+            background-color: var(--bg-main);
+        }
+
+        body {
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: calc(12px + env(safe-area-inset-top)) 14px calc(20px + env(safe-area-inset-bottom)) 14px;
+            position: relative;
+            overflow-x: hidden;
+            transition: background-color 0.25s ease, color 0.25s ease;
+        }
+
+        /* -----------------------------------------
+           헤더 : 홈 버튼 / 타이틀 / 설정 버튼
+        ----------------------------------------- */
+        header {
+            width: 100%;
+            max-width: 460px;
+            flex-shrink: 0;
+        }
+
+        .top_box {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            width: 100%;
+            height: 40px;
+        }
+
+        h1 {
+            font-size: clamp(1.05rem, 4.8vw, 1.25rem);
+            font-weight: 800;
+            letter-spacing: 2px;
+            color: var(--text);
+            text-shadow: var(--text-shadow);
+        }
+
+        .home_ic {
+            color: var(--sub) !important;
+            text-decoration: none;
+            position: absolute;
+            left: 0;
+            font-size: 1.3rem;
+            cursor: pointer;
+            padding: 5px 8px;
+            margin-right: 0;
+        }
+
+        .btn-icon {
+            position: absolute;
+            right: 0;
+            background: var(--panel);
+            color: var(--sub);
+            border: 1px solid var(--border);
+            padding: 6px 11px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: transform 0.2s ease, background-color 0.25s ease;
+        }
+
+        .btn-icon:active {
+            transform: scale(0.94);
+        }
+
+        /* -----------------------------------------
+           공통 화면 / 입력 / 버튼
+        ----------------------------------------- */
+        .screen {
+            width: 100%;
+            max-width: 460px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 22px;
+            margin-top: 34px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .text-input {
+            width: 100%;
+            background-color: var(--inset-bg);
+            border: 2px solid var(--border);
+            border-radius: 14px;
+            color: var(--text);
+            font-size: 1.15rem;
+            font-weight: 700;
+            text-align: center;
+            padding: 15px 14px;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.25s ease;
+        }
+
+        .text-input::placeholder {
+            color: var(--placeholder);
+            font-weight: 500;
+        }
+
+        .text-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px var(--accent-soft);
+        }
+
+        .text-input.flash-ok {
+            border-color: var(--ok);
+            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);
+        }
+
+        .text-input.shake {
+            animation: shake 0.35s ease;
+            border-color: var(--danger);
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-8px); }
+            40% { transform: translateX(8px); }
+            60% { transform: translateX(-5px); }
+            80% { transform: translateX(5px); }
+        }
+
+        .btn {
+            background: var(--panel);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 12px 22px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: var(--shadow-card);
+            transition: transform 0.2s ease, background-color 0.25s ease, color 0.25s ease;
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+            color: #422006;
+            border: none;
+            width: 100%;
+            padding: 15px;
+            font-size: 1rem;
+            box-shadow: var(--shadow-accent);
+        }
+
+        /* -----------------------------------------
+           시작 화면
+        ----------------------------------------- */
+        .start-card {
+            width: 100%;
+            background: var(--panel-soft);
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            padding: 32px 22px 26px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 18px;
+            box-shadow: var(--shadow-card);
+            transition: background-color 0.25s ease;
+        }
+
+        .start-emoji {
+            font-size: 3.4rem;
+        }
+
+        .start-desc {
+            color: var(--sub);
+            font-size: 0.88rem;
+            line-height: 1.7;
+            text-align: center;
+            word-break: keep-all;
+        }
+
+        .start-desc b {
+            color: var(--accent-text);
+        }
+
+        .field-label {
+            width: 100%;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--accent-text);
+            letter-spacing: 1px;
+            margin-bottom: -8px;
+        }
+
+        /* -----------------------------------------
+           플레이 화면
+        ----------------------------------------- */
+        .topic-banner {
+            width: 100%;
+            background: var(--accent-soft);
+            border: 1px dashed var(--accent-line);
+            border-radius: 16px;
+            padding: 14px 16px;
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: 800;
+            word-break: keep-all;
+        }
+
+        #topic-label {
+            color: var(--accent-text);
+        }
+
+        .topic-suffix {
+            color: var(--sub);
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .counter-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .counter-main {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+        }
+
+        #word-index {
+            font-size: 3.6rem;
+            font-weight: 900;
+            line-height: 1;
+            color: var(--text);
+            text-shadow: var(--text-shadow);
+        }
+
+        .counter-unit {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--sub);
+        }
+
+        .phase-hint {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--sub);
+            letter-spacing: 0.5px;
+        }
+
+        .phase-hint.is-new {
+            color: var(--accent-text);
+        }
+
+        /* 타이머 게이지 */
+        #timer-wrap {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .timer-track {
+            flex: 1;
+            height: 8px;
+            background: var(--inset-bg);
+            border: 1px solid var(--border);
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        #timer-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, var(--accent), #fbbf24);
+            border-radius: 99px;
+            transition: background 0.3s ease;
+        }
+
+        #timer-fill.urgent {
+            background: linear-gradient(90deg, var(--danger), #fb7185);
+        }
+
+        #timer-text {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--sub);
+            width: 32px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .input-row {
+            width: 100%;
+            display: flex;
+            gap: 8px;
+        }
+
+        .input-row .text-input {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .btn-enter {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            color: var(--accent-text);
+            border-radius: 14px;
+            padding: 0 18px;
+            font-size: 1.2rem;
+            font-weight: 800;
+            cursor: pointer;
+            flex-shrink: 0;
+            box-shadow: var(--shadow-card);
+        }
+
+        .btn-enter:active {
+            transform: scale(0.95);
+        }
+
+        .feedback {
+            font-size: 0.85rem;
+            font-weight: 700;
+            min-height: 20px;
+            text-align: center;
+            word-break: keep-all;
+        }
+
+        .feedback.ok { color: var(--ok); }
+        .feedback.warn { color: var(--accent-text); }
+
+        /* -----------------------------------------
+           설정 패널
+        ----------------------------------------- */
+        .overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: var(--scrim);
+            z-index: 50;
+        }
+
+        .overlay.open {
+            display: block;
+        }
+
+        .settings-panel {
+            position: fixed;
+            top: -520px;
+            left: 12px;
+            right: 12px;
+            max-width: 440px;
+            margin: 0 auto;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 20px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            box-shadow: var(--shadow-panel);
+            transition: top 0.32s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.25s ease;
+        }
+
+        .settings-panel.open {
+            top: calc(20px + env(safe-area-inset-top));
+        }
+
+        .settings-title {
+            font-size: 1rem;
+            font-weight: 800;
+            color: var(--accent-text);
+            letter-spacing: 1px;
+        }
+
+        .settings-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .settings-label {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .settings-desc {
+            font-size: 0.72rem;
+            color: var(--sub);
+            line-height: 1.5;
+            margin-top: 3px;
+            word-break: keep-all;
+        }
+
+        /* 테마 선택 (라이트 / 다크) */
+        .seg {
+            display: flex;
+            gap: 2px;
+            background: var(--inset-bg);
+            border: 1px solid var(--border);
+            padding: 3px;
+            border-radius: 20px;
+            flex-shrink: 0;
+        }
+
+        .seg-btn {
+            background: none;
+            border: none;
+            color: var(--sub);
+            padding: 6px 13px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            border-radius: 15px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .seg-btn.active {
+            background-color: var(--accent);
+            color: #422006;
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35);
+        }
+
+        /* 토글 스위치 */
+        .switch {
+            position: relative;
+            width: 50px;
+            height: 28px;
+            flex-shrink: 0;
+            border-radius: 99px;
+            background: var(--switch-off);
+            border: none;
+            cursor: pointer;
+            transition: background 0.25s ease;
+        }
+
+        .switch.on {
+            background: var(--accent);
+        }
+
+        .switch::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.3);
+            transition: left 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .switch.on::after {
+            left: 25px;
+        }
+
+        .sec-input {
+            width: 92px;
+            background-color: var(--inset-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            font-size: 0.95rem;
+            font-weight: 700;
+            text-align: center;
+            padding: 9px 8px;
+            outline: none;
+            flex-shrink: 0;
+        }
+
+        .sec-input:focus {
+            border-color: var(--accent);
+        }
+
+        .settings-row.disabled {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        .settings-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 4px;
+        }
+
+        .settings-actions .btn {
+            flex: 1;
+            box-shadow: none;
+            background: var(--inset-bg);
+        }
+
+        .btn-apply {
+            background: var(--accent) !important;
+            color: #422006;
+            border: none;
+        }
+
+        /* -----------------------------------------
+           결과 모달
+        ----------------------------------------- */
+        .modal-back {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: var(--scrim-strong);
+            z-index: 200;
+            padding: 20px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-back.open {
+            display: flex;
+        }
+
+        .modal {
+            width: 100%;
+            max-width: 420px;
+            max-height: 86dvh;
+            overflow-y: auto;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            padding: 26px 22px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+            box-shadow: var(--shadow-modal);
+        }
+
+        .modal-emoji {
+            font-size: 2.8rem;
+        }
+
+        .modal-title {
+            font-size: 1.2rem;
+            font-weight: 800;
+        }
+
+        .modal-reason {
+            font-size: 0.88rem;
+            color: var(--sub);
+            text-align: center;
+            line-height: 1.7;
+            word-break: keep-all;
+        }
+
+        .modal-reason b {
+            color: var(--danger);
+        }
+
+        .score-row {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .score-cell {
+            flex: 1;
+            background: var(--inset-bg);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 12px 8px;
+            text-align: center;
+        }
+
+        .score-cell .cap {
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--sub);
+            letter-spacing: 1px;
+        }
+
+        .score-cell .val {
+            font-size: 1.6rem;
+            font-weight: 900;
+            color: var(--accent-text);
+            margin-top: 2px;
+        }
+
+        .reveal-title {
+            width: 100%;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--sub);
+            letter-spacing: 1px;
+            margin-top: 4px;
+        }
+
+        .word-list {
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            max-height: 170px;
+            overflow-y: auto;
+            padding: 12px;
+            background: var(--inset-bg);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+        }
+
+        .word-chip {
+            background: var(--chip-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 6px 10px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            word-break: break-all;
+        }
+
+        .word-chip .no {
+            color: var(--sub);
+            font-size: 0.7rem;
+            margin-right: 5px;
+        }
+
+        .word-chip.missed {
+            background: var(--missed-bg);
+            border-color: var(--missed-border);
+            color: var(--missed-text);
+        }
+
+        .empty-note {
+            color: var(--sub);
+            font-size: 0.8rem;
+        }
+
+        @media (max-height: 640px) {
+            .screen { margin-top: 18px; gap: 16px; }
+            #word-index { font-size: 2.8rem; }
+            .start-card { padding: 24px 20px 22px; gap: 14px; }
+            .start-emoji { font-size: 2.6rem; }
+        }
+
+        /* =========================================
+           AI 대결 버전에서 새로 붙는 부분
+        ========================================= */
+
+        .btn:disabled,
+        .btn-enter:disabled {
+            opacity: 0.45;
+            pointer-events: none;
+        }
+
+        /* 시작 화면 : 주제 추천 */
+        .topic-tools {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: -6px;
+        }
+
+        .link-btn {
+            background: none;
+            border: none;
+            color: var(--accent-text);
+            font-family: inherit;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 4px 2px;
+        }
+
+        .link-btn:disabled { opacity: 0.5; cursor: default; }
+
+        .topic-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            justify-content: center;
+        }
+
+        .topic-chip {
+            background: var(--accent-soft);
+            border: 1px solid var(--accent-line);
+            color: var(--accent-text);
+            border-radius: 999px;
+            padding: 7px 13px;
+            font-family: inherit;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .topic-chip:active { transform: scale(0.96); }
+
+        .model-badge {
+            font-size: 0.72rem;
+            color: var(--sub);
+            letter-spacing: 0.01em;
+        }
+
+        .notice {
+            background: var(--missed-bg);
+            border: 1px solid var(--missed-border);
+            color: var(--missed-text);
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 0.78rem;
+            line-height: 1.5;
+            text-align: left;
+        }
+
+        /* 플레이 화면 : 차례 표시 */
+        .turn-bar {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .turn-chip {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 10px 8px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--sub);
+            box-shadow: var(--shadow-card);
+            transition: 0.18s;
+        }
+
+        .turn-chip.active {
+            background: var(--accent);
+            border-color: transparent;
+            color: #fff;
+            box-shadow: var(--shadow-accent);
+        }
+
+        .turn-chip .count {
+            font-size: 0.75rem;
+            font-weight: 600;
+            opacity: 0.8;
+        }
+
+        /* AI 차례 / 판정 대기 */
+        .waiting {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 22px 18px;
+            box-shadow: var(--shadow-card);
+            width: 100%;
+        }
+
+        .waiting-label {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .waiting-sub {
+            font-size: 0.76rem;
+            color: var(--sub);
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        .dots { display: flex; gap: 5px; }
+
+        .dots span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: bounce 1s infinite ease-in-out;
+        }
+
+        .dots span:nth-child(2) { animation-delay: 0.15s; }
+        .dots span:nth-child(3) { animation-delay: 0.3s; }
+
+        @keyframes bounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+            30% { transform: translateY(-6px); opacity: 1; }
+        }
+
+        /* AI 가 낸 단어 공개 카드 */
+        .reveal-card {
+            width: 100%;
+            background: var(--panel);
+            border: 2px solid var(--accent-line);
+            border-radius: 18px;
+            padding: 22px 18px;
+            box-shadow: var(--shadow-accent);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            animation: pop 0.25s ease-out;
+        }
+
+        @keyframes pop {
+            from { transform: scale(0.92); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .reveal-cap {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--sub);
+        }
+
+        .reveal-word {
+            font-size: 2.1rem;
+            font-weight: 800;
+            color: var(--accent-text);
+            word-break: break-all;
+            text-align: center;
+            line-height: 1.2;
+        }
+
+        .reveal-note {
+            font-size: 0.76rem;
+            color: var(--sub);
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        /* 결과 모달 : 승리 / 판정 기록 */
+        .modal-title.win { color: var(--ok); }
+
+        .verdict-box {
+            background: var(--inset-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 0.78rem;
+            color: var(--sub);
+            line-height: 1.55;
+            text-align: left;
+        }
+
+        .word-chip.by-ai {
+            background: var(--accent-soft);
+            border-color: var(--accent-line);
+            color: var(--accent-text);
+        }
+
+        .word-chip .who {
+            font-size: 0.66rem;
+            opacity: 0.75;
+            margin-right: 4px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- 설정 패널이 열렸을 때 뒤를 덮는 반투명 배경 -->
+    <div class="overlay" id="overlay" onclick="closeSettings()"></div>
+
+    <!-- 설정 패널 : 테마 / 제한 시간 사용 여부 / 입력 1개당 제한 초 -->
+    <div class="settings-panel" id="settings-panel">
+        <div class="settings-title">⚙️ 게임 설정</div>
+
+        <div class="settings-row">
+            <div>
+                <div class="settings-label">🎨 화면 테마</div>
+                <div class="settings-desc">고르는 순간 바로 미리 보여드려요.</div>
+            </div>
+            <div class="seg">
+                <button class="seg-btn" id="theme-light" onclick="pickTheme('light')">라이트</button>
+                <button class="seg-btn" id="theme-dark" onclick="pickTheme('dark')">다크</button>
+            </div>
+        </div>
+
+        <div class="settings-row">
+            <div>
+                <div class="settings-label">⏱️ 제한 시간 사용</div>
+                <div class="settings-desc">내 차례에만 흐릅니다. AI 를 기다리는 동안에는 멈춰요.</div>
+            </div>
+            <button class="switch" id="timer-switch" onclick="toggleTimerSwitch()"></button>
+        </div>
+
+        <div class="settings-row" id="sec-row">
+            <div>
+                <div class="settings-label">🕒 입력 1개당 제한 초</div>
+                <div class="settings-desc">단어 하나를 입력할 때마다 주어지는 시간 (1 ~ 60초)</div>
+            </div>
+            <input class="sec-input" id="sec-input" type="number" min="1" max="60" step="1" value="5">
+        </div>
+
+        <div class="settings-actions">
+            <button class="btn" onclick="closeSettings()">취소</button>
+            <button class="btn btn-apply" onclick="applySettings()">저장</button>
+        </div>
+    </div>
+
+    <header>
+        <div class="top_box">
+            <span class="home_ic" style="visibility:hidden">⬅</span>
+            <h1>시장에 가면</h1>
+            <button class="btn-icon" onclick="openSettings()">⚙️</button>
+        </div>
+    </header>
+
+    <!-- 1. 시작 화면 : 주제를 직접 정하거나 AI 에게 추천받는다 -->
+    <main class="screen" id="start-screen">
+        <div class="start-card">
+            <div class="start-emoji">🛒</div>
+            <p class="start-desc">
+                AI 와 <b>번갈아</b> 단어를 쌓습니다.<br>
+                앞의 단어를 <b>순서대로 다시 입력</b>한 뒤 새 단어를 하나 추가하세요.<br>
+                단어가 주제에 맞는지는 <b>심판 AI</b> 가 판정합니다.
+            </p>
+
+            <div class="notice hidden" id="key-notice"></div>
+            <div class="model-badge" id="model-badge"></div>
+
+            <div class="field-label">주제</div>
+            <input class="text-input" id="topic-input" type="text" maxlength="20" placeholder="예) 시장, 동물원, 냉장고"
+                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+
+            <div class="topic-tools">
+                <button class="link-btn" id="suggest-btn" onclick="askTopics()">🎲 AI에게 추천받기</button>
+            </div>
+
+            <div class="topic-chips" id="topic-chips"></div>
+
+            <button class="btn btn-primary" id="start-btn" onclick="startNewGame()">게임 시작</button>
+        </div>
+    </main>
+
+    <!-- 2. 플레이 화면 -->
+    <main class="screen hidden" id="play-screen">
+        <div class="topic-banner">
+            <span id="topic-label">시장</span><span class="topic-suffix">에 가면~</span>
+        </div>
+
+        <div class="turn-bar">
+            <div class="turn-chip" id="turn-me">🙋 나 <span class="count" id="count-me">0</span></div>
+            <div class="turn-chip" id="turn-ai">🤖 AI <span class="count" id="count-ai">0</span></div>
+        </div>
+
+        <!-- 2-a. 내 차례 -->
+        <div id="my-turn-area">
+            <div class="counter-box">
+                <div class="counter-main">
+                    <span id="word-index">1</span>
+                    <span class="counter-unit">번째 단어</span>
+                </div>
+                <div class="phase-hint" id="phase-hint">첫 단어를 입력하세요</div>
+            </div>
+
+            <div id="timer-wrap" class="hidden">
+                <div class="timer-track">
+                    <div id="timer-fill"></div>
+                </div>
+                <div id="timer-text">5.0</div>
+            </div>
+
+            <div class="input-row">
+                <input class="text-input" id="word-input" type="text" maxlength="30" placeholder="단어 입력"
+                    autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                <button class="btn-enter" id="submit-btn" onclick="submitWord()">▶</button>
+            </div>
+
+            <div class="feedback" id="feedback"></div>
+        </div>
+
+        <!-- 2-b. 심판 / AI 를 기다리는 중 -->
+        <div class="waiting hidden" id="waiting-area">
+            <div class="dots"><span></span><span></span><span></span></div>
+            <div class="waiting-label" id="waiting-label">심판 AI 가 확인 중…</div>
+            <div class="waiting-sub" id="waiting-sub"></div>
+            <button class="btn hidden" id="retry-btn" onclick="retryPending()">🔄 다시 시도</button>
+        </div>
+
+        <!-- 2-c. AI 가 낸 단어 공개 -->
+        <div class="reveal-card hidden" id="reveal-area">
+            <div class="reveal-cap">🤖 AI 가 추가한 단어</div>
+            <div class="reveal-word" id="reveal-word"></div>
+            <div class="reveal-note">이 단어도 외워야 해요. 확인을 누르면 사라집니다.</div>
+            <button class="btn btn-primary" onclick="closeReveal()">확인했어요</button>
+        </div>
+
+        <button class="btn" onclick="restartGame()">🔄 새 게임</button>
+    </main>
+
+    <!-- 3. 결과 모달 -->
+    <div class="modal-back" id="result-modal">
+        <div class="modal">
+            <div class="modal-emoji" id="result-emoji">💥</div>
+            <div class="modal-title" id="result-title">게임 오버</div>
+            <div class="modal-reason" id="result-reason"></div>
+
+            <div class="verdict-box hidden" id="result-verdict"></div>
+
+            <div class="score-row">
+                <div class="score-cell">
+                    <div class="cap">쌓은 단어</div>
+                    <div class="val" id="result-score">0</div>
+                </div>
+                <div class="score-cell">
+                    <div class="cap">최고 기록</div>
+                    <div class="val" id="result-best">0</div>
+                </div>
+            </div>
+
+            <div class="reveal-title">📜 함께 쌓았던 단어들</div>
+            <div class="word-list" id="result-words"></div>
+
+            <button class="btn btn-primary" onclick="restartGame()">새 게임</button>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+
+</html>
