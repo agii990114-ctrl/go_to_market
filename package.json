@@ -8,7 +8,8 @@
     "dev": "node --watch server/index.js",
     "mock": "node server/start-mock.js",
     "bench": "node bench/run.js",
-    "setup:dict": "node scripts/fetch-dict.js"
+    "setup:dict": "node scripts/fetch-dict.js",
+    "setup:wiki": "node scripts/fetch-wiki-titles.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

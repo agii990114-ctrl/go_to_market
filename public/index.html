@@ -826,6 +826,25 @@
             margin-top: 2px;
         }
 
+        .topic-status {
+            font-size: 0.78rem;
+            line-height: 1.5;
+            text-align: left;
+            border-radius: 10px;
+            padding: 8px 11px;
+        }
+
+        .topic-status.checking {
+            background: var(--inset-bg);
+            color: var(--sub);
+        }
+
+        .topic-status.bad {
+            background: var(--missed-bg);
+            border: 1px solid var(--missed-border);
+            color: var(--missed-text);
+        }
+
         .trend-note {
             font-size: 0.74rem;
             color: var(--sub);
@@ -1084,6 +1103,8 @@
             <div class="field-label">주제</div>
             <input class="text-input" id="topic-input" type="text" maxlength="20" placeholder="예) 시장, 동물원, 냉장고"
                 autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+
+            <div class="topic-status hidden" id="topic-status"></div>
 
             <div class="topic-tools">
                 <button class="link-btn" id="suggest-btn" onclick="askTopics()">🎲 AI에게 추천받기</button>

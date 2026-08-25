@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 import { MOCK, llmStatus, modelFor, providerFor, warmUpLocalModels } from './llm.js';
 import { cacheStats } from './verdict-cache.js';
-import { judge, suggestTopics } from './agents.js';
+import { judge, suggestTopics, validateTopic } from './agents.js';
+import { checkTopicShape } from './topic.js';
 import { isDuplicate, playAiTurn } from './game.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -70,11 +71,38 @@ app.post('/api/topics', async (req, res, next) => {
     }
 });
 
+// 추천도 사람 입력과 같은 관문을 통과해야 한다.
+// 모델이 "시장과일" 같은 조어를 계속 만들어 내는데, 검증에서 되돌려 보낼
+// 주제를 추천 목록에 올리면 앞뒤가 안 맞는다.
 function cleanTopics(result) {
     return (result?.topics || [])
         .map(t => String(typeof t === 'string' ? t : t?.topic ?? '').trim())
-        .filter(t => /^[가-힣 ]{2,12}$/.test(t));
+        .filter(t => /^[가-힣 ]{2,12}$/.test(t))
+        .filter(t => checkTopicShape(t).ok);
 }
+
+/* -----------------------------------------------------------
+   주제 검증 : 조어는 코드가, 장소인지는 모델이 본다
+----------------------------------------------------------- */
+app.post('/api/topic-check', async (req, res, next) => {
+    try {
+        const topic = String(req.body?.topic ?? '').trim();
+
+        const shape = checkTopicShape(topic);
+        if (!shape.ok) {
+            return res.json({ ok: false, reason: shape.reason, byCode: true });
+        }
+
+        const verdict = await validateTopic(topic);
+        res.json({
+            ok: verdict.isPlace,
+            reason: verdict.reason,
+            byCode: false,
+        });
+    } catch (err) {
+        next(err);
+    }
+});
 
 /* -----------------------------------------------------------
    내가 낸 단어 심판

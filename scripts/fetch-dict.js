@@ -31,10 +31,13 @@ const raw = await res.text();
 
 const all = raw.split(/\r?\n/);
 
-// 한글 음절만으로 된 2~8글자만 남긴다.
-// 자모 표제어(ㄴ다고), 한자, 기호, 한 글자짜리는 게임에서 쓸 일이 없다.
+// 한글 음절만으로 된 1~8글자만 남긴다.
+//
+// 한때 2글자 이상만 받았는데, 그러면 "물", "산", "집", "댁" 같은 한 글자 낱말이
+// 통째로 빠진다. 실제로 주제 "할머니 댁" 이 조어로 차단됐다.
+// 자모 표제어(ㄱ, ㄴ다고)는 ㄱ-ㅎ 가 가-힣 범위 밖이라 이 정규식에서 이미 걸러진다.
 const words = [...new Set(
-    all.map(w => w.trim()).filter(w => /^[가-힣]{2,8}$/.test(w))
+    all.map(w => w.trim()).filter(w => /^[가-힣]{1,8}$/.test(w))
 )].sort();
 
 fs.mkdirSync(dataDir, { recursive: true });

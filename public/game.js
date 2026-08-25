@@ -160,21 +160,25 @@ async function askTopics() {
 
 function pickTopic(el) {
     $('topic-input').value = el.dataset.topic;
+    $('topic-status').classList.add('hidden');
     $('topic-input').focus();
 }
 
 /* -----------------------------------------
    게임 진행
 ----------------------------------------- */
-function startNewGame() {
+async function startNewGame() {
     const input = $('topic-input');
     const value = input.value.trim();
     if (!value) {
-        input.classList.add('shake');
-        setTimeout(() => input.classList.remove('shake'), 400);
-        input.focus();
+        shakeTopic();
         return;
     }
+
+    // 주제가 장소인지 먼저 확인한다.
+    // 이 게임은 "<주제>에 가면 ~도 있고" 라서, 주제가 장소가 아니면 판정 기준이
+    // 흔들린다. 실제로 "게임" 을 주제로 두었더니 심판이 지어낸 이름까지 통과시켰다.
+    if (!(await checkTopic(value))) return;
 
     session++;
     topic = value;
@@ -197,6 +201,44 @@ function startNewGame() {
     updateCounts();
     startInputTimer();
     focusInput();
+}
+
+/** 주제를 서버에 물어본다. 통과하면 true */
+async function checkTopic(value) {
+    const box = $('topic-status');
+    const btn = $('start-btn');
+
+    box.className = 'topic-status checking';
+    box.innerText = '주제를 확인하는 중…';
+    btn.disabled = true;
+
+    try {
+        const res = await api('/api/topic-check', { topic: value });
+        if (res.ok) {
+            box.classList.add('hidden');
+            return true;
+        }
+        box.className = 'topic-status bad';
+        box.innerHTML = '이 주제로는 게임을 만들기 어려워요.<br>'
+            + escapeHtml(res.reason || '')
+            + '<br><b>장소</b>를 골라주세요. 예) 시장, 목욕탕, 냉장고, 서랍';
+        shakeTopic();
+        return false;
+    } catch (err) {
+        // 확인에 실패했다고 게임을 막지는 않는다. 알리고 그냥 진행한다.
+        box.className = 'topic-status checking';
+        box.innerText = '주제 확인을 건너뛰었어요 (' + err.message + ')';
+        return true;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function shakeTopic() {
+    const input = $('topic-input');
+    input.classList.add('shake');
+    setTimeout(() => input.classList.remove('shake'), 400);
+    input.focus();
 }
 
 // 새 게임 : 주제부터 다시 정할 수 있도록 시작 화면으로 되돌린다
@@ -660,6 +702,11 @@ $('topic-input').addEventListener('keydown', function (e) {
         e.preventDefault();
         startNewGame();
     }
+});
+
+// 주제를 고쳐 쓰기 시작하면 이전 안내는 지운다
+$('topic-input').addEventListener('input', function () {
+    $('topic-status').classList.add('hidden');
 });
 
 $('sec-input').addEventListener('keydown', function (e) {
