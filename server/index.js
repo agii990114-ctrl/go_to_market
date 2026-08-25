@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { MOCK, llmStatus, modelFor, providerFor, warmUpLocalModels } from './llm.js';
+import { cacheStats } from './verdict-cache.js';
 import { judge, suggestTopics } from './agents.js';
 import { isDuplicate, playAiTurn } from './game.js';
 
@@ -46,7 +47,7 @@ function badRequest(message) {
 app.get('/api/health', async (req, res, next) => {
     try {
         const status = await llmStatus();
-        res.json({ ok: true, refereeOnAi: REFEREE_ON_AI, ...status });
+        res.json({ ok: true, refereeOnAi: REFEREE_ON_AI, verdictCache: cacheStats(), ...status });
     } catch (err) {
         next(err);
     }

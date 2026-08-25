@@ -12,7 +12,8 @@
  * 두 역할이 같은 모델로 해석되면 답이 똑같아지는데, 그 중복은 프롬프트를 비트는 대신
  * game.js 에서 심판 호출을 건너뛰는 것으로 해결한다.
  */
-import { askJson } from './llm.js';
+import { askJson, modelFor } from './llm.js';
+import { cachedVerdict } from './verdict-cache.js';
 
 /* 판정 기준 — 심판과 검수가 글자 그대로 공유한다.
  *
@@ -138,6 +139,13 @@ function tidyVerdict(verdict) {
    심판 : 공식 판정
 ----------------------------------------------------------- */
 export function judge(topic, word) {
+    return cachedVerdict(
+        { role: 'judge', model: modelFor('judge'), topic, word },
+        () => askJsonJudge(topic, word),
+    );
+}
+
+function askJsonJudge(topic, word) {
     return askJson({
         role: 'judge',
         maxTokens: 400,
@@ -157,6 +165,13 @@ ${RUBRIC}`,
    심판과 완전히 별개의 호출이고, 그 단어를 왜 골랐는지는 알려주지 않는다.
 ----------------------------------------------------------- */
 export function inspect(topic, word) {
+    return cachedVerdict(
+        { role: 'inspect', model: modelFor('inspect'), topic, word },
+        () => askJsonInspect(topic, word),
+    );
+}
+
+function askJsonInspect(topic, word) {
     return askJson({
         role: 'inspect',
         maxTokens: 400,
