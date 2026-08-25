@@ -26,7 +26,6 @@ let timerHandle = null;
 let deadline = 0;
 
 const SETTINGS_KEY = 'market_settings';
-const BEST_KEY = 'market_ai_bestRecord';
 const THEME_KEY = 'theme';   // 다른 게임과 같은 키를 써서 테마를 함께 맞춘다
 
 const $ = id => document.getElementById(id);
@@ -217,6 +216,8 @@ function restartGame() {
     $('result-modal').classList.remove('open');
     $('play-screen').classList.add('hidden');
     $('start-screen').classList.remove('hidden');
+
+    renderHomeStats();
 
     const topicInput = $('topic-input');
     topicInput.value = topic;
@@ -433,18 +434,50 @@ function gameOver(reason) {
     phase = 'over';
 
     const score = entries.length;
-    let best = parseInt(localStorage.getItem(BEST_KEY), 10);
-    if (isNaN(best)) best = 0;
-    if (score > best) {
-        best = score;
-        localStorage.setItem(BEST_KEY, best);
+    const isWin = (reason === 'win');
+
+    // 몇 번째에서 무너졌는지 (1부터). 이 값이 훈련 기록에서 제일 쓸모 있다.
+    const stumbleAt = isWin ? null
+        : (reason === 'wrong' ? lastMiss.index + 1 : cursor + 1);
+
+    const before = summarize();
+    const stats = recordGame({ topic, score, outcome: reason, stumbleAt });
+    // 첫 판은 언제나 "최고 기록" 이 되지만 넘어설 이전 기록이 없어서 공허하다.
+    // 비교 대상이 있을 때만 축하한다.
+    const isRecord = !isWin && score > 0 && before.played > 0 && score > before.best;
+
+    renderResultHeader(reason, isWin, isRecord);
+    renderResultReason(reason, isWin);
+
+    $('result-score').innerText = score;
+    $('result-avg').innerText = stats.recentAvg;
+    $('result-best').innerText = stats.best;
+
+    renderCoach(stats, isWin, isRecord, stumbleAt);
+    renderWordList(reason);
+
+    $('result-modal').classList.add('open');
+}
+
+/* 이기지 못한 판을 "실패" 로 부르지 않는다. 훈련에서는 어디까지 갔는지가 성과다. */
+function renderResultHeader(reason, isWin, isRecord) {
+    let emoji = '🧠';
+    let title = '여기까지 왔어요';
+
+    if (isWin) {
+        emoji = '🏆';
+        title = 'AI 가 손을 들었어요';
+    } else if (isRecord) {
+        emoji = '🎉';
+        title = '최고 기록!';
     }
 
-    const isWin = (reason === 'win');
-    $('result-emoji').innerText = isWin ? '🏆' : '💥';
-    $('result-title').innerText = isWin ? '승리!' : '게임 오버';
-    $('result-title').classList.toggle('win', isWin);
+    $('result-emoji').innerText = emoji;
+    $('result-title').innerText = title;
+    $('result-title').classList.toggle('win', isWin || isRecord);
+}
 
+function renderResultReason(reason, isWin) {
     const reasonBox = $('result-reason');
     const verdictBox = $('result-verdict');
     verdictBox.classList.add('hidden');
@@ -453,37 +486,92 @@ function gameOver(reason) {
         reasonBox.innerHTML = 'AI 가 <b>' + escapeHtml(topic) + '</b> 주제에서<br>'
             + '더 낼 수 있는 새 단어를 찾지 못했어요.';
     } else if (reason === 'timeout') {
-        reasonBox.innerHTML = '⏱️ <b>시간 초과</b>로 게임이 끝났습니다.<br>'
-            + (cursor + 1) + '번째 단어를 입력하지 못했어요.';
+        reasonBox.innerHTML = '⏱️ ' + (cursor + 1) + '번째 단어에서 시간이 다 됐어요.';
     } else if (reason === 'offtopic') {
-        reasonBox.innerHTML = '⚖️ 심판 AI 가 <b>' + escapeHtml(lastVerdict.word) + '</b> 을(를)<br>'
-            + '주제에 맞지 않는다고 판정했습니다.';
+        reasonBox.innerHTML = '심판 AI 가 <b>' + escapeHtml(lastVerdict.word) + '</b> 을(를)<br>'
+            + '주제에 맞지 않는다고 봤어요.';
         verdictBox.innerText = '심판 사유 : ' + (lastVerdict.reason || '(사유 없음)');
         verdictBox.classList.remove('hidden');
     } else {
-        reasonBox.innerHTML = (lastMiss.index + 1) + '번째 단어를 <b>' + escapeHtml(lastMiss.typed) + '</b>(으)로 입력했어요.<br>'
-            + '정답은 <b>' + escapeHtml(lastMiss.answer) + '</b> 였습니다.';
+        reasonBox.innerHTML = (lastMiss.index + 1) + '번째가 <b>' + escapeHtml(lastMiss.answer) + '</b> 였는데<br>'
+            + '<b>' + escapeHtml(lastMiss.typed) + '</b> 을(를) 입력했어요.';
+    }
+}
+
+/* 다음 판에 무엇을 노리면 되는지 한 줄로 알려준다 */
+function renderCoach(stats, isWin, isRecord, stumbleAt) {
+    const box = $('result-coach');
+    const lines = [];
+
+    if (isRecord) {
+        lines.push('이전 최고를 넘었어요. 이 주제로 한 번 더 가면 더 늘어나요.');
+    } else if (isWin) {
+        lines.push('주제를 바닥냈어요. 다음엔 더 넓은 주제로 가보세요.');
     }
 
-    $('result-score').innerText = score;
-    $('result-best').innerText = best;
+    // 훈련에 쓸모 있는 순서로 담는다. 다음 판에 뭘 노릴지 알려주는 게 먼저다.
+    if (stats.stumble && !isWin) {
+        const { low, high } = stats.stumble;
+        lines.push(`보통 ${low}~${high}번째에서 놓쳐요.`
+            + (stumbleAt && stumbleAt > high ? ' 이번엔 그보다 멀리 갔어요.' : ''));
+    }
 
-    // 숨겨두었던 단어 목록은 게임이 끝난 지금 공개한다
+    if (stats.trend && stats.trend.dir !== 'flat') {
+        lines.push(stats.trend.dir === 'up'
+            ? `최근 5판이 그 전보다 평균 ${stats.trend.diff}개 늘었어요.`
+            : `최근 5판이 그 전보다 평균 ${stats.trend.diff}개 줄었어요. 쉬었다 하는 것도 방법이에요.`);
+    }
+
+    if (stats.todayPlayed > 1) {
+        lines.push(`오늘 ${stats.todayPlayed}판째, 오늘 최고는 ${stats.todayBest}개예요.`);
+    }
+
+    // 모달이 길어지면 정작 봐야 할 단어 목록이 화면 밖으로 밀린다
+    box.innerHTML = lines.slice(0, 3).map(escapeHtml).join('<br>');
+    box.classList.toggle('hidden', lines.length === 0);
+}
+
+// 숨겨두었던 단어 목록은 게임이 끝난 지금 공개한다
+function renderWordList(reason) {
     const listBox = $('result-words');
     if (entries.length === 0) {
         listBox.innerHTML = '<div class="empty-note">아직 쌓은 단어가 없어요.</div>';
-    } else {
-        listBox.innerHTML = entries.map(function (e, i) {
-            const missed = (reason === 'wrong' && lastMiss.index === i) ? ' missed' : '';
-            const byAi = (e.by === 'ai' && !missed) ? ' by-ai' : '';
-            return '<div class="word-chip' + missed + byAi + '">'
-                + '<span class="no">' + (i + 1) + '</span>'
-                + '<span class="who">' + (e.by === 'ai' ? '🤖' : '🙋') + '</span>'
-                + escapeHtml(e.word) + '</div>';
-        }).join('');
+        return;
+    }
+    listBox.innerHTML = entries.map(function (e, i) {
+        const missed = (reason === 'wrong' && lastMiss.index === i) ? ' missed' : '';
+        const byAi = (e.by === 'ai' && !missed) ? ' by-ai' : '';
+        return '<div class="word-chip' + missed + byAi + '">'
+            + '<span class="no">' + (i + 1) + '</span>'
+            + '<span class="who">' + (e.by === 'ai' ? '🤖' : '🙋') + '</span>'
+            + escapeHtml(e.word) + '</div>';
+    }).join('');
+}
+
+/* 시작 화면에 지금까지의 훈련 기록을 보여준다 */
+function renderHomeStats() {
+    const stats = summarize();
+    const strip = $('home-stats');
+    const note = $('home-trend');
+
+    if (stats.played === 0) {
+        strip.classList.add('hidden');
+        note.classList.add('hidden');
+        return;
     }
 
-    $('result-modal').classList.add('open');
+    $('home-today').innerText = stats.todayPlayed + '판';
+    $('home-avg').innerText = stats.recentAvg;
+    $('home-best').innerText = stats.best;
+    strip.classList.remove('hidden');
+
+    const parts = [];
+    if (stats.trend && stats.trend.dir === 'up') parts.push(`최근 평균이 <b>${stats.trend.diff}개</b> 올랐어요`);
+    if (stats.stumble) parts.push(`보통 <b>${stats.stumble.low}~${stats.stumble.high}번째</b>에서 놓쳐요`);
+    if (stats.wins) parts.push(`AI 를 <b>${stats.wins}번</b> 이겼어요`);
+
+    note.innerHTML = parts.join(' · ');
+    note.classList.toggle('hidden', parts.length === 0);
 }
 
 // 입력한 단어를 그대로 화면에 넣기 전에 특수문자를 안전하게 바꿔준다
@@ -608,5 +696,6 @@ async function checkServer() {
 
 loadTheme();
 loadSettings();
+renderHomeStats();
 checkServer();
 $('topic-input').focus();

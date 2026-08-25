@@ -797,6 +797,57 @@
             letter-spacing: 0.01em;
         }
 
+        /* 시작 화면 : 오늘까지의 훈련 기록 */
+        .stat-strip {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .stat-strip .cellx {
+            flex: 1;
+            background: var(--inset-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 9px 6px;
+            text-align: center;
+        }
+
+        .stat-strip .k {
+            font-size: 0.66rem;
+            color: var(--sub);
+            letter-spacing: 0.02em;
+        }
+
+        .stat-strip .v {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: var(--text);
+            margin-top: 2px;
+        }
+
+        .trend-note {
+            font-size: 0.74rem;
+            color: var(--sub);
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        .trend-note b { color: var(--accent-text); }
+
+        /* 결과 화면 : 훈련 코멘트 */
+        .coach-box {
+            background: var(--accent-soft);
+            border: 1px solid var(--accent-line);
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 0.79rem;
+            color: var(--accent-text);
+            line-height: 1.55;
+            text-align: left;
+            font-weight: 600;
+        }
+
         .notice {
             background: var(--missed-bg);
             border: 1px solid var(--missed-border);
@@ -1023,6 +1074,13 @@
             <div class="notice hidden" id="key-notice"></div>
             <div class="model-badge" id="model-badge"></div>
 
+            <div class="stat-strip hidden" id="home-stats">
+                <div class="cellx"><div class="k">오늘</div><div class="v" id="home-today">0판</div></div>
+                <div class="cellx"><div class="k">최근 평균</div><div class="v" id="home-avg">0</div></div>
+                <div class="cellx"><div class="k">최고 기록</div><div class="v" id="home-best">0</div></div>
+            </div>
+            <div class="trend-note hidden" id="home-trend"></div>
+
             <div class="field-label">주제</div>
             <input class="text-input" id="topic-input" type="text" maxlength="20" placeholder="예) 시장, 동물원, 냉장고"
                 autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
@@ -1104,14 +1162,20 @@
 
             <div class="score-row">
                 <div class="score-cell">
-                    <div class="cap">쌓은 단어</div>
+                    <div class="cap">이번 기록</div>
                     <div class="val" id="result-score">0</div>
+                </div>
+                <div class="score-cell">
+                    <div class="cap">최근 평균</div>
+                    <div class="val" id="result-avg">0</div>
                 </div>
                 <div class="score-cell">
                     <div class="cap">최고 기록</div>
                     <div class="val" id="result-best">0</div>
                 </div>
             </div>
+
+            <div class="coach-box hidden" id="result-coach"></div>
 
             <div class="reveal-title">📜 함께 쌓았던 단어들</div>
             <div class="word-list" id="result-words"></div>
@@ -1120,6 +1184,7 @@
         </div>
     </div>
 
+    <script src="stats.js"></script>
     <script src="game.js"></script>
 </body>
 
