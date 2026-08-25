@@ -17,28 +17,52 @@ import { cleanWord, isUsableWord, normalize } from '../server/game.js';
 import { isRealWord } from '../server/dictionary.js';
 import { clearVerdictCache } from '../server/verdict-cache.js';
 
-/* 통과해야 하는 것 */
-const SHOULD_PASS = [
-    ['시장', '고등어'], ['시장', '흥정'], ['시장', '떡볶이'], ['시장', '뻥튀기'],
-    ['동물원', '코끼리'], ['동물원', '사육사'],
-    ['냉장고', '김치'], ['냉장고', '계란'],
-    ['바다', '파도'], ['병원', '간호사'],
-    ['학교', '칠판'], ['여름', '매미'],
-    // 실제로 억울하게 탈락했던 것들. 다시는 떨어지면 안 된다.
-    ['냉장고', '고기'], ['냉장고', '우유'], ['냉장고', '반찬'], ['냉장고', '얼음'],
-    ['시장', '향신료'], ['시장', '상인'], ['시장', '지갑'],
-    // "정반대는 탈락" 규칙 때문에 계절 단어가 과하게 걸리지 않는지 지킨다
-    ['여름', '빙수'], ['여름', '에어컨'], ['겨울', '장갑'], ['겨울', '눈사람'],
+/*
+ * 케이스를 두 갈래로 나눈다.
+ *
+ *   SEEN : RUBRIC 의 판정 예시에 그대로 들어 있는 쌍.
+ *          맞히는 게 당연하다. 프롬프트가 시킨 대로 하는지만 본다.
+ *   HELD : 프롬프트 어디에도 없는 쌍.
+ *          규칙이 일반화되는지를 재는 진짜 성적은 이쪽이다.
+ *
+ * 둘을 섞어 한 숫자로 내면 외운 것과 이해한 것이 구별되지 않는다.
+ */
+
+/* 통과해야 하는 것 — 프롬프트 예시에 있음 */
+const PASS_SEEN = [
+    ['냉장고', '고기'], ['냉장고', '우유'], ['냉장고', '성에'],
+    ['시장', '흥정'], ['시장', '지갑'], ['학교', '첫사랑'],
+    ['여름', '빙수'], ['겨울', '장갑'],
 ];
 
-/* 탈락해야 하는 것 */
-const SHOULD_FAIL = [
-    ['시장', '은하수'], ['시장', '미적분'], ['시장', 'asdfgh'],
-    ['동물원', '주식배당금'], ['냉장고', '화산폭발'], ['냉장고', 'ㅁㄴㅇㄹ'],
-    ['바다', '프린터'], ['병원', '용암'],
-    ['학교', '심해어'],
-    // 무관이 아니라 정반대라 탈락해야 하는 것들
+/* 통과해야 하는 것 — 프롬프트에 없음 */
+const PASS_HELD = [
+    ['시장', '고등어'], ['시장', '떡볶이'], ['시장', '뻥튀기'],
+    ['시장', '향신료'], ['시장', '상인'],
+    ['동물원', '코끼리'], ['동물원', '사육사'],
+    ['냉장고', '김치'], ['냉장고', '계란'], ['냉장고', '반찬'], ['냉장고', '얼음'],
+    ['바다', '파도'], ['병원', '간호사'], ['학교', '칠판'], ['여름', '매미'],
+    ['여름', '에어컨'], ['겨울', '눈사람'],
+    // 같은 단어가 주제에 따라 뒤집히는지 — 외운 것과 이해한 것을 가르는 쌍
+    ['여름', '선풍기'],
+    ['사막', '낙타'], ['도서관', '정적'], ['사우나', '수건'], ['밤', '달빛'],
+    ['겨울', '목도리'],
+];
+
+/* 탈락해야 하는 것 — 프롬프트 예시에 있음 */
+const FAIL_SEEN = [
+    ['냉장고', '화산'], ['시장', '미적분'], ['학교', 'asdfgh'],
     ['여름', '눈사람'], ['여름', '털장갑'], ['냉장고', '화로'],
+];
+
+/* 탈락해야 하는 것 — 프롬프트에 없음 */
+const FAIL_HELD = [
+    ['시장', '은하수'], ['동물원', '주식배당금'], ['냉장고', 'ㅁㄴㅇㄹ'],
+    ['바다', '프린터'], ['병원', '용암'], ['학교', '심해어'],
+    // 정반대 규칙이 처음 보는 쌍에도 서는지
+    ['겨울', '선풍기'],
+    ['사막', '빙하'], ['도서관', '고함'], ['사우나', '얼음'], ['밤', '햇빛'],
+    ['여름', '패딩'],
 ];
 
 /* 정답을 정하지 않고 일관성만 보는 것 */
@@ -53,26 +77,25 @@ const GEN_ROUNDS = 15;
 async function benchJudge(model) {
     process.env.MODEL_JUDGE = model;
     const times = [];
-    const wrong = { pass: [], fail: [] };
     const errors = [];
 
-    let passHit = 0;
-    for (const [topic, word] of SHOULD_PASS) {
-        const { ms, out, error } = await timed(() => judge(topic, word));
-        times.push(ms);
-        if (error) errors.push(`${topic}/${word}: ${error.slice(0, 50)}`);
-        else if (out.valid) passHit++;
-        else wrong.pass.push(`${topic}/${word}`);
+    async function run(cases, wantValid) {
+        let hit = 0;
+        const wrong = [];
+        for (const [topic, word] of cases) {
+            const { ms, out, error } = await timed(() => judge(topic, word));
+            times.push(ms);
+            if (error) errors.push(`${topic}/${word}: ${error.slice(0, 50)}`);
+            else if (Boolean(out.valid) === wantValid) hit++;
+            else wrong.push(`${topic}/${word}`);
+        }
+        return { rate: cases.length ? hit / cases.length : 0, n: cases.length, wrong };
     }
 
-    let failHit = 0;
-    for (const [topic, word] of SHOULD_FAIL) {
-        const { ms, out, error } = await timed(() => judge(topic, word));
-        times.push(ms);
-        if (error) errors.push(`${topic}/${word}: ${error.slice(0, 50)}`);
-        else if (!out.valid) failHit++;
-        else wrong.fail.push(`${topic}/${word}`);
-    }
+    const passSeen = await run(PASS_SEEN, true);
+    const passHeld = await run(PASS_HELD, true);
+    const failSeen = await run(FAIL_SEEN, false);
+    const failHeld = await run(FAIL_HELD, false);
 
     // 판정 캐시가 켜져 있으면 두 번째 질문은 무조건 같은 답이라 일관성이 100% 로 나온다.
     // 그건 캐시를 재는 것이지 모델을 재는 게 아니다. 사이사이 캐시를 비운다.
@@ -88,12 +111,10 @@ async function benchJudge(model) {
     }
 
     return {
-        passRate: passHit / SHOULD_PASS.length,
-        failRate: failHit / SHOULD_FAIL.length,
+        passSeen, passHeld, failSeen, failHeld,
         consistency: consistent / AMBIGUOUS.length,
         avgMs: Math.round(times.reduce((a, b) => a + b, 0) / times.length),
         maxMs: Math.max(...times),
-        wrong,
         errors,
     };
 }
@@ -158,13 +179,16 @@ for (const model of models) {
     console.log(`${warm.ms}ms\n`);
 
     const j = await benchJudge(model);
-    console.log('  [판정]');
-    console.log(`    통과해야 할 것을 통과 : ${pct(j.passRate)}  (${SHOULD_PASS.length}개 중)`);
-    console.log(`    탈락시켜야 할 것을 탈락 : ${pct(j.failRate)}  (${SHOULD_FAIL.length}개 중)   ← 변별력`);
-    console.log(`    애매한 것 재질문 일관성 : ${pct(j.consistency)}  (${AMBIGUOUS.length}개 중)`);
+    const row = (label, r) => '    ' + label.padEnd(22) + pct(r.rate) + `  (${r.n}개 중)`
+        + (r.wrong.length ? '   ✗ ' + r.wrong.join(', ') : '');
+
+    console.log('  [판정]  SEEN = 프롬프트 예시에 있는 쌍 / HELD = 프롬프트에 없는 쌍');
+    console.log(row('통과 · SEEN', j.passSeen));
+    console.log(row('통과 · HELD', j.passHeld) + '   ← 일반화');
+    console.log(row('탈락 · SEEN', j.failSeen));
+    console.log(row('탈락 · HELD', j.failHeld) + '   ← 일반화');
+    console.log(`    재질문 일관성          ${pct(j.consistency)}  (${AMBIGUOUS.length}개 중, 캐시 끔)`);
     console.log(`    응답 : 평균 ${j.avgMs}ms / 최대 ${j.maxMs}ms`);
-    if (j.wrong.pass.length) console.log(`    ✗ 통과했어야 하는데 탈락 : ${j.wrong.pass.join(', ')}`);
-    if (j.wrong.fail.length) console.log(`    ✗ 탈락했어야 하는데 통과 : ${j.wrong.fail.join(', ')}`);
     if (j.errors.length) {
         console.log(`    ⚠️  응답 실패 ${j.errors.length}건`);
         for (const e of j.errors.slice(0, 3)) console.log(`         ${e}`);
