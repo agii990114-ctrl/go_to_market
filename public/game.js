@@ -704,6 +704,17 @@ $('topic-input').addEventListener('keydown', function (e) {
     }
 });
 
+// AI 단어 공개 화면에는 입력칸이 없어서 엔터가 갈 곳이 없다.
+// 확인 버튼도 엔터로 넘어가도록 문서 전체에서 받는다.
+// (설정 패널이 열려 있을 때는 그쪽 엔터를 가로채면 안 된다)
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    if (phase !== 'reveal') return;
+    if ($('settings-panel').classList.contains('open')) return;
+    e.preventDefault();
+    closeReveal();
+});
+
 // 주제를 고쳐 쓰기 시작하면 이전 안내는 지운다
 $('topic-input').addEventListener('input', function () {
     $('topic-status').classList.add('hidden');
