@@ -386,10 +386,20 @@ function showReveal(word) {
     $('reveal-area').classList.remove('hidden');
     $('reveal-word').innerText = word;
     updateTurnBar();
+
+    // 확인 버튼으로 포커스를 옮긴다.
+    // 문서 전체에서 엔터를 받고는 있지만, 포커스가 숨겨진 입력칸에 남아 있으면
+    // 브라우저나 한글 입력기 상태에 따라 엔터가 그쪽에서 먹힐 수 있다.
+    // 버튼에 포커스가 있으면 엔터가 곧 클릭이라 어떤 경로로도 넘어간다.
+    $('reveal-ok').focus();
 }
 
 // AI 단어를 확인했다 → 다시 내 차례. 처음부터 전부 암송한다.
 function closeReveal() {
+    // 엔터가 두 경로(버튼 클릭 + 문서 리스너)로 동시에 들어올 수 있다.
+    // 두 번 돌아도 탈이 없도록 막는다.
+    if (phase !== 'reveal') return;
+
     phase = 'me';
     cursor = 0;
     showMyTurn();
@@ -711,6 +721,8 @@ document.addEventListener('keydown', function (e) {
     if (e.key !== 'Enter') return;
     if (phase !== 'reveal') return;
     if ($('settings-panel').classList.contains('open')) return;
+    // 한글 입력 중의 엔터는 글자를 확정하는 용도다. 그것까지 가로채면 안 된다.
+    if (e.isComposing || e.keyCode === 229) return;
     e.preventDefault();
     closeReveal();
 });
