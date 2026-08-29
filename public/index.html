@@ -826,6 +826,73 @@
             margin-top: 2px;
         }
 
+        /* 모드 선택 */
+        .seg-wide { width: 100%; flex-shrink: 1; }
+        .seg-wide .seg-btn { flex: 1; padding: 9px 4px; font-size: 0.78rem; }
+
+        .setup-block { width: 100%; display: flex; flex-direction: column; gap: 14px; }
+
+        .range-row { width: 100%; display: flex; align-items: center; gap: 10px; }
+        .range-row .text-input { flex: 1; min-width: 0; }
+
+        .range-tilde {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: var(--sub);
+            flex-shrink: 0;
+        }
+
+        /* 숫자 모드에서 제시되는 숫자 */
+        .num-reveal { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+
+        .num-reveal-box {
+            padding: 12px 26px;
+            background: var(--accent-soft);
+            border: 1px dashed var(--accent-line);
+            border-radius: 16px;
+            text-align: center;
+        }
+
+        .num-reveal-box .cap {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--sub);
+            letter-spacing: 1px;
+        }
+
+        .num-reveal-box .val {
+            font-size: 2.1rem;
+            font-weight: 900;
+            line-height: 1.2;
+            color: var(--accent-text);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* 결과 모달 : 목록 여닫기 · 이어하기 */
+        .reveal-toggle {
+            width: 100%;
+            background: var(--inset-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--sub);
+            font-size: 0.78rem;
+            font-weight: 700;
+            padding: 11px 10px;
+            cursor: pointer;
+        }
+
+        .retry-note { font-size: 0.75rem; font-weight: 700; color: var(--accent-text); }
+
+        .modal-actions {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .modal-actions .btn { width: 100%; }
+
         .topic-status {
             font-size: 0.78rem;
             line-height: 1.5;
@@ -1083,8 +1150,8 @@
     <!-- 1. 시작 화면 : 주제를 직접 정하거나 AI 에게 추천받는다 -->
     <main class="screen" id="start-screen">
         <div class="start-card">
-            <div class="start-emoji">🛒</div>
-            <p class="start-desc">
+            <div class="start-emoji" id="start-emoji">🤖</div>
+            <p class="start-desc" id="start-desc">
                 AI 와 <b>번갈아</b> 단어를 쌓습니다.<br>
                 앞의 단어를 <b>순서대로 다시 입력</b>한 뒤 새 단어를 하나 추가하세요.<br>
                 단어가 주제에 맞는지는 <b>심판 AI</b> 가 판정합니다.
@@ -1100,17 +1167,35 @@
             </div>
             <div class="trend-note hidden" id="home-trend"></div>
 
-            <div class="field-label">주제</div>
-            <input class="text-input" id="topic-input" type="text" maxlength="20" placeholder="예) 시장, 동물원, 냉장고"
-                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-
-            <div class="topic-status hidden" id="topic-status"></div>
-
-            <div class="topic-tools">
-                <button class="link-btn" id="suggest-btn" onclick="askTopics()">🎲 AI에게 추천받기</button>
+            <div class="field-label">모드</div>
+            <div class="seg seg-wide">
+                <button class="seg-btn" id="mode-ai" onclick="pickMode('ai')">🤖 AI 대결</button>
+                <button class="seg-btn" id="mode-solo" onclick="pickMode('solo')">📝 혼자·단어</button>
+                <button class="seg-btn" id="mode-number" onclick="pickMode('number')">🔢 혼자·숫자</button>
             </div>
 
-            <div class="topic-chips" id="topic-chips"></div>
+            <div class="setup-block" id="word-setup">
+                <div class="field-label">주제</div>
+                <input class="text-input" id="topic-input" type="text" maxlength="20" placeholder="예) 시장, 목욕탕, 냉장고"
+                    autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+
+                <div class="topic-status hidden" id="topic-status"></div>
+
+                <div class="topic-tools" id="topic-tools">
+                    <button class="link-btn" id="suggest-btn" onclick="askTopics()">🎲 AI에게 추천받기</button>
+                </div>
+
+                <div class="topic-chips" id="topic-chips"></div>
+            </div>
+
+            <div class="setup-block hidden" id="number-setup">
+                <div class="field-label">숫자 범위 (0 ~ 9999)</div>
+                <div class="range-row">
+                    <input class="text-input" id="min-input" type="number" min="0" max="9999" step="1" value="1" inputmode="numeric">
+                    <span class="range-tilde">~</span>
+                    <input class="text-input" id="max-input" type="number" min="0" max="9999" step="1" value="99" inputmode="numeric">
+                </div>
+            </div>
 
             <button class="btn btn-primary" id="start-btn" onclick="startNewGame()">게임 시작</button>
         </div>
@@ -1122,7 +1207,7 @@
             <span id="topic-label">시장</span><span class="topic-suffix">에 가면~</span>
         </div>
 
-        <div class="turn-bar">
+        <div class="turn-bar" id="turn-bar">
             <div class="turn-chip" id="turn-me">🙋 나 <span class="count" id="count-me">0</span></div>
             <div class="turn-chip" id="turn-ai">🤖 AI <span class="count" id="count-ai">0</span></div>
         </div>
@@ -1132,9 +1217,17 @@
             <div class="counter-box">
                 <div class="counter-main">
                     <span id="word-index">1</span>
-                    <span class="counter-unit">번째 단어</span>
+                    <span class="counter-unit" id="counter-unit">번째 단어</span>
                 </div>
                 <div class="phase-hint" id="phase-hint">첫 단어를 입력하세요</div>
+
+                <div class="num-reveal hidden" id="num-reveal">
+                    <div class="num-reveal-box">
+                        <div class="cap">✨ 새 숫자</div>
+                        <div class="val" id="num-reveal-val">0</div>
+                    </div>
+                    <button class="btn btn-primary" id="num-confirm-btn" onclick="confirmNumber()">✅ 확인</button>
+                </div>
             </div>
 
             <div id="timer-wrap" class="hidden">
@@ -1144,7 +1237,7 @@
                 <div id="timer-text">5.0</div>
             </div>
 
-            <div class="input-row">
+            <div class="input-row" id="input-row">
                 <input class="text-input" id="word-input" type="text" maxlength="30" placeholder="단어 입력"
                     autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                 <button class="btn-enter" id="submit-btn" onclick="submitWord()">▶</button>
@@ -1198,10 +1291,15 @@
 
             <div class="coach-box hidden" id="result-coach"></div>
 
-            <div class="reveal-title">📜 함께 쌓았던 단어들</div>
-            <div class="word-list" id="result-words"></div>
+            <div class="retry-note hidden" id="retry-note"></div>
 
-            <button class="btn btn-primary" onclick="restartGame()">새 게임</button>
+            <button class="reveal-toggle" id="reveal-toggle" onclick="toggleWordList()">📜 쌓았던 단어 보기 ▼</button>
+            <div class="word-list hidden" id="result-words"></div>
+
+            <div class="modal-actions">
+                <button class="btn hidden" id="resume-btn" onclick="resumeGame()">✏️ 그 자리부터 이어하기</button>
+                <button class="btn btn-primary" onclick="restartGame()">🔄 새 게임</button>
+            </div>
         </div>
     </div>
 

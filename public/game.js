@@ -13,8 +13,19 @@ let lastMiss = null;      // 암송을 틀렸을 때 { index, typed, answer }
 let lastVerdict = null;   // 심판이 탈락시켰을 때 { word, reason }
 let pendingRetry = null;  // 통신이 실패했을 때 다시 시도할 동작
 
+/*
+ * 모드
+ *   'ai'     AI 와 번갈아 둔다. 심판이 주제 적합성을 본다.
+ *   'solo'   혼자 단어를 쌓는다. 서버도 AI 도 쓰지 않는다.
+ *   'number' 정해진 범위에서 숫자가 하나씩 제시된다. 외우기만 하면 된다.
+ */
+let mode = 'ai';
+let pendingNumber = null;   // 숫자 모드에서 지금 제시 중인 숫자
+let retryCount = 0;         // 이번 판에서 '이어하기' 를 쓴 횟수
+let lastReason = '';        // 마지막 게임 오버 사유
+
 // 설정값 (기본값 : 라이트 테마 / 제한 시간 꺼짐 / 입력 1개당 5초)
-let settings = { timerEnabled: false, seconds: 5 };
+let settings = { timerEnabled: false, seconds: 5, mode: 'ai', min: 1, max: 99 };
 let theme = 'light';
 
 // 설정 패널에서 저장을 누르기 전까지의 임시값
@@ -132,6 +143,96 @@ function applySettings() {
 }
 
 /* -----------------------------------------
+   모드
+----------------------------------------- */
+function pickMode(value) {
+    mode = ['ai', 'solo', 'number'].includes(value) ? value : 'ai';
+    settings.mode = mode;
+    saveSettings();
+    syncModeUI();
+
+    const target = $(mode === 'number' ? 'min-input' : 'topic-input');
+    target.focus();
+    target.select();
+}
+
+/** 시작 화면을 지금 고른 모드에 맞게 바꾼다 */
+function syncModeUI() {
+    const isNum = (mode === 'number');
+    const isAi = (mode === 'ai');
+
+    for (const m of ['ai', 'solo', 'number']) {
+        $('mode-' + m).classList.toggle('active', mode === m);
+    }
+    $('word-setup').classList.toggle('hidden', isNum);
+    $('number-setup').classList.toggle('hidden', !isNum);
+
+    // 주제 추천과 주제 검증은 서버가 필요하다. 혼자 하는 모드에서는 감춘다.
+    $('topic-tools').classList.toggle('hidden', !isAi);
+    if (!isAi) {
+        $('topic-chips').innerHTML = '';
+        $('topic-status').classList.add('hidden');
+    }
+
+    $('start-emoji').innerText = isNum ? '🔢' : (isAi ? '🤖' : '📝');
+    $('start-desc').innerHTML = isNum
+        ? '정해진 범위에서 숫자가 하나씩 제시돼요.<br>제시된 숫자를 <b>처음부터 순서대로 다시 입력</b>하면<br>다음 숫자가 나옵니다.'
+        : isAi
+            ? 'AI 와 <b>번갈아</b> 단어를 쌓습니다.<br>앞의 단어를 <b>순서대로 다시 입력</b>한 뒤 새 단어를 하나 추가하세요.<br>단어가 주제에 맞는지는 <b>심판 AI</b> 가 판정합니다.'
+            : '주제를 정하고 단어를 하나씩 이어 붙여 보세요.<br>앞에서 넣은 단어를 <b>순서대로 다시 입력</b>한 뒤<br>새 단어를 하나 추가하면 됩니다.';
+
+    renderHomeStats();
+}
+
+/** 모드에 따라 달라지는 표기 */
+function unitLabel() {
+    return (mode === 'number') ? '숫자' : '단어';
+}
+
+/** 정해진 범위에서 숫자를 하나 뽑는다 (양 끝값 포함) */
+function drawNumber() {
+    return settings.min + Math.floor(Math.random() * (settings.max - settings.min + 1));
+}
+
+/** 숫자 범위 입력칸을 읽는다. 문제가 있으면 false */
+function readNumberRange() {
+    const lo = parseInt($('min-input').value, 10);
+    const hi = parseInt($('max-input').value, 10);
+
+    if (isNaN(lo) || isNaN(hi) || lo < 0 || hi > 9999) {
+        alert('숫자 범위는 0 ~ 9999 사이로 입력해주세요.');
+        $('min-input').focus();
+        return false;
+    }
+    if (lo > hi) {
+        alert('앞쪽에 더 작은 숫자를 넣어주세요.');
+        $('min-input').focus();
+        $('min-input').select();
+        return false;
+    }
+    settings.min = lo;
+    settings.max = hi;
+    return true;
+}
+
+/** 플레이 화면을 모드에 맞게 맞춘다 */
+function syncPlayModeUI() {
+    const isNum = (mode === 'number');
+    const input = $('word-input');
+
+    document.querySelector('.topic-suffix').innerText = isNum ? ' 사이의 숫자' : '에 가면~';
+    $('counter-unit').innerText = '번째 ' + unitLabel();
+
+    // 차례 표시줄과 AI 단어 공개 카드는 AI 대결에서만 쓴다
+    $('turn-bar').classList.toggle('hidden', mode !== 'ai');
+
+    input.placeholder = isNum ? '숫자 입력' : '단어 입력';
+    input.maxLength = isNum ? 4 : 30;
+    if (isNum) input.setAttribute('inputmode', 'numeric');
+    else input.removeAttribute('inputmode');
+}
+
+/* -----------------------------------------
    주제 추천
 ----------------------------------------- */
 async function askTopics() {
@@ -168,26 +269,37 @@ function pickTopic(el) {
    게임 진행
 ----------------------------------------- */
 async function startNewGame() {
-    const input = $('topic-input');
-    const value = input.value.trim();
-    if (!value) {
-        shakeTopic();
-        return;
+    if (mode === 'number') {
+        if (!readNumberRange()) return;
+        topic = settings.min + ' ~ ' + settings.max;
+    } else {
+        const input = $('topic-input');
+        const value = input.value.trim();
+        if (!value) {
+            shakeTopic();
+            return;
+        }
+        // 주제가 장소인지는 AI 대결에서만 확인한다.
+        // 혼자 하는 모드는 서버 없이도 돌아가야 하고, 판정할 심판도 없다.
+        if (mode === 'ai' && !(await checkTopic(value))) return;
+        topic = value;
     }
 
-    // 주제가 장소인지 먼저 확인한다.
-    // 이 게임은 "<주제>에 가면 ~도 있고" 라서, 주제가 장소가 아니면 판정 기준이
-    // 흔들린다. 실제로 "게임" 을 주제로 두었더니 심판이 지어낸 이름까지 통과시켰다.
-    if (!(await checkTopic(value))) return;
+    settings.mode = mode;
+    saveSettings();
 
     session++;
-    topic = value;
     entries = [];
     cursor = 0;
     lastMiss = null;
     lastVerdict = null;
     pendingRetry = null;
+    pendingNumber = null;
+    retryCount = 0;
+    lastReason = '';
     phase = 'me';
+
+    syncPlayModeUI();
 
     $('topic-label').innerText = topic;
     $('word-input').value = '';
@@ -200,7 +312,7 @@ async function startNewGame() {
     updateStatusUI();
     updateCounts();
     startInputTimer();
-    focusInput();
+    focusActiveControl();
 }
 
 /** 주제를 서버에 물어본다. 통과하면 true */
@@ -300,14 +412,66 @@ function submitWord() {
 
     // (2) 새 단어 추가 구간 : 중복은 코드가 먼저 막는다 (패배가 아니라 경고)
     if (entries.some(e => normalize(e.word) === normalize(value))) {
-        showFeedback('이미 나온 단어예요!', 'warn');
+        showFeedback('이미 나온 ' + unitLabel() + '예요!', 'warn');
         shakeInput();
         input.select();
         startInputTimer();
         return;
     }
 
+    // 혼자 하는 모드에는 심판이 없다. 바로 채택한다.
+    if (mode === 'solo') {
+        entries.push({ word: value, by: 'me' });
+        cursor = 0;
+        input.value = '';
+        flashOk();
+        showFeedback(entries.length + '개 완성! 처음부터 다시 떠올려보세요', 'ok');
+        updateStatusUI();
+        updateCounts();
+        startInputTimer();
+        return;
+    }
+
     judgeMyWord(value);
+}
+
+/** 숫자 모드 : 제시된 숫자를 확인하고 회상 구간으로 넘어간다 */
+function confirmNumber(auto) {
+    if (phase !== 'me' || mode !== 'number' || pendingNumber === null) return;
+
+    entries.push({ word: String(pendingNumber), by: 'ai' });
+    pendingNumber = null;
+    cursor = 0;
+    $('word-input').value = '';
+    showFeedback(entries.length + '개 완성! 처음부터 순서대로 다시 입력하세요', 'ok');
+    updateStatusUI();
+    updateCounts();
+    startInputTimer();
+    if (!auto) focusActiveControl();
+}
+
+/** 이어하기 : 오타로 끝났을 때 그 자리부터 다시 */
+function resumeGame() {
+    retryCount++;
+    phase = 'me';
+
+    $('result-modal').classList.remove('open');
+    $('word-input').value = '';
+
+    showFeedback('다시 도전! ' + (cursor + 1) + '번째 ' + unitLabel() + '부터 입력하세요', 'warn');
+    showMyTurn();
+    updateStatusUI();
+    startInputTimer();
+    focusActiveControl();
+}
+
+/** 결과 모달의 목록 여닫기 (이어할 수 있으니 기본은 접힌 상태) */
+function toggleWordList() {
+    const list = $('result-words');
+    const opened = !list.classList.toggle('hidden');
+    $('reveal-toggle').innerText = opened
+        ? '📜 목록 접기 ▲'
+        : '📜 쌓았던 ' + unitLabel() + ' 보기 ▼';
 }
 
 // 내가 낸 새 단어를 심판 AI 에게 보낸다
@@ -449,31 +613,53 @@ function retryPending() {
     fn();
 }
 
-function updateTurnBar() {
-    const mine = (phase === 'me' || phase === 'judging');
-    $('turn-me').classList.toggle('active', mine);
-    $('turn-ai').classList.toggle('active', phase === 'ai' || phase === 'reveal');
-}
-
 function updateCounts() {
     $('count-me').innerText = entries.filter(e => e.by === 'me').length;
     $('count-ai').innerText = entries.filter(e => e.by === 'ai').length;
 }
 
+/** 차례 표시줄은 AI 대결에서만 뜻이 있다 */
+function updateTurnBar() {
+    if (mode !== 'ai') return;
+    const mine = (phase === 'me' || phase === 'judging');
+    $('turn-me').classList.toggle('active', mine);
+    $('turn-ai').classList.toggle('active', phase === 'ai' || phase === 'reveal');
+}
+
 // 지금 몇 번째 단어를 입력할 차례인지 화면에 표시
 function updateStatusUI() {
     const hint = $('phase-hint');
+    const reveal = $('num-reveal');
+    const inputRow = $('input-row');
     $('word-index').innerText = cursor + 1;
 
     const isNewWord = cursor >= entries.length;
     hint.classList.toggle('is-new', isNewWord);
 
+    if (isNewWord && mode === 'number') {
+        // 새 차례가 되면 숫자를 하나 뽑아 보여주고, 입력창 대신 확인 버튼만 둔다
+        if (pendingNumber === null) pendingNumber = drawNumber();
+        $('num-reveal-val').innerText = pendingNumber;
+        reveal.classList.remove('hidden');
+        inputRow.classList.add('hidden');
+        hint.innerText = '✨ 제시된 숫자를 확인하세요';
+        updateTurnBar();
+        return;
+    }
+
+    reveal.classList.add('hidden');
+    inputRow.classList.remove('hidden');
+
     if (isNewWord) {
-        hint.innerText = entries.length === 0 ? '✨ 첫 단어를 입력하세요' : '✨ 새 단어를 추가하세요';
-    } else {
+        hint.innerText = entries.length === 0
+            ? '✨ 첫 ' + unitLabel() + '를 입력하세요'
+            : '✨ 새 ' + unitLabel() + '를 추가하세요';
+    } else if (mode === 'ai') {
         // 누가 낸 단어인지만 알려준다. 단어 자체는 끝까지 감춘다.
-        const owner = entries[cursor].by === 'ai' ? 'AI 가 낸 단어' : '내가 낸 단어';
-        hint.innerText = '기억을 떠올려 입력하세요 · ' + owner;
+        hint.innerText = '기억을 떠올려 입력하세요 · '
+            + (entries[cursor].by === 'ai' ? 'AI 가 낸 단어' : '내가 낸 단어');
+    } else {
+        hint.innerText = '기억을 떠올려 입력하세요';
     }
     updateTurnBar();
 }
@@ -492,8 +678,9 @@ function gameOver(reason) {
     const stumbleAt = isWin ? null
         : (reason === 'wrong' ? lastMiss.index + 1 : cursor + 1);
 
-    const before = summarize();
-    const stats = recordGame({ topic, score, outcome: reason, stumbleAt });
+    lastReason = reason;
+    const before = summarize(mode);
+    const stats = recordGame({ topic, score, outcome: reason, stumbleAt, mode });
     // 첫 판은 언제나 "최고 기록" 이 되지만 넘어설 이전 기록이 없어서 공허하다.
     // 비교 대상이 있을 때만 축하한다.
     const isRecord = !isWin && score > 0 && before.played > 0 && score > before.best;
@@ -507,6 +694,20 @@ function gameOver(reason) {
 
     renderCoach(stats, isWin, isRecord, stumbleAt);
     renderWordList(reason);
+
+    // 이어하기는 '기억을 놓친' 경우에만 준다.
+    // 심판에게 탈락한 판(offtopic)은 다른 단어를 내면 되는 것이라 이어할 자리가 없다.
+    const canResume = (reason === 'wrong' || reason === 'timeout');
+    $('resume-btn').classList.toggle('hidden', !canResume);
+
+    const retryBox = $('retry-note');
+    retryBox.innerText = '🔁 이어하기 ' + retryCount + '회 사용';
+    retryBox.classList.toggle('hidden', retryCount === 0);
+
+    // 이어서 할 수 있으니 목록은 접어둔 채로 둔다
+    $('result-words').classList.add('hidden');
+    $('reveal-toggle').innerText = '📜 쌓았던 ' + unitLabel() + ' 보기 ▼';
+    $('num-reveal').classList.add('hidden');
 
     $('result-modal').classList.add('open');
 }
@@ -538,7 +739,7 @@ function renderResultReason(reason, isWin) {
         reasonBox.innerHTML = 'AI 가 <b>' + escapeHtml(topic) + '</b> 주제에서<br>'
             + '더 낼 수 있는 새 단어를 찾지 못했어요.';
     } else if (reason === 'timeout') {
-        reasonBox.innerHTML = '⏱️ ' + (cursor + 1) + '번째 단어에서 시간이 다 됐어요.';
+        reasonBox.innerHTML = '⏱️ ' + (cursor + 1) + '번째 ' + unitLabel() + '에서 시간이 다 됐어요.';
     } else if (reason === 'offtopic') {
         reasonBox.innerHTML = '심판 AI 가 <b>' + escapeHtml(lastVerdict.word) + '</b> 을(를)<br>'
             + '주제에 맞지 않는다고 봤어요.';
@@ -593,16 +794,19 @@ function renderWordList(reason) {
     listBox.innerHTML = entries.map(function (e, i) {
         const missed = (reason === 'wrong' && lastMiss.index === i) ? ' missed' : '';
         const byAi = (e.by === 'ai' && !missed) ? ' by-ai' : '';
+        // 누가 냈는지는 AI 대결에서만 뜻이 있다
+        const who = mode === 'ai'
+            ? '<span class="who">' + (e.by === 'ai' ? '🤖' : '🙋') + '</span>'
+            : '';
         return '<div class="word-chip' + missed + byAi + '">'
-            + '<span class="no">' + (i + 1) + '</span>'
-            + '<span class="who">' + (e.by === 'ai' ? '🤖' : '🙋') + '</span>'
+            + '<span class="no">' + (i + 1) + '</span>' + who
             + escapeHtml(e.word) + '</div>';
     }).join('');
 }
 
 /* 시작 화면에 지금까지의 훈련 기록을 보여준다 */
 function renderHomeStats() {
-    const stats = summarize();
+    const stats = summarize(mode);
     const strip = $('home-stats');
     const note = $('home-trend');
 
@@ -666,7 +870,11 @@ function drawTimer() {
     fill.classList.toggle('urgent', ratio <= 0.3);
     $('timer-text').innerText = (remain / 1000).toFixed(1);
 
-    if (remain <= 0 && phase === 'me') gameOver('timeout');
+    if (remain <= 0 && phase === 'me') {
+        // 숫자 제시 화면은 보기만 하는 단계다. 시간이 다 되면 실패 대신 자동으로 넘긴다.
+        if (mode === 'number' && cursor >= entries.length) confirmNumber(true);
+        else gameOver('timeout');
+    }
 }
 
 /* -----------------------------------------
@@ -674,6 +882,12 @@ function drawTimer() {
 ----------------------------------------- */
 function focusInput() {
     $('word-input').focus();
+}
+
+/** 지금 화면에 놓인 조작 요소(입력칸 또는 숫자 확인 버튼)에 포커스를 준다 */
+function focusActiveControl() {
+    if (mode === 'number' && cursor >= entries.length) $('num-confirm-btn').focus();
+    else focusInput();
 }
 
 function shakeInput() {
@@ -732,6 +946,15 @@ $('topic-input').addEventListener('input', function () {
     $('topic-status').classList.add('hidden');
 });
 
+['min-input', 'max-input'].forEach(function (id) {
+    $(id).addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            startNewGame();
+        }
+    });
+});
+
 $('sec-input').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') {
         e.preventDefault();
@@ -766,6 +989,11 @@ async function checkServer() {
 
 loadTheme();
 loadSettings();
-renderHomeStats();
+
+// 지난번에 고른 모드와 숫자 범위를 그대로 되살린다
+mode = settings.mode;
+$('min-input').value = settings.min;
+$('max-input').value = settings.max;
+syncModeUI();
 checkServer();
 $('topic-input').focus();

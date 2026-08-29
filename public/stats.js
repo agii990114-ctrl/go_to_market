@@ -31,10 +31,14 @@ function loadHistory() {
 
 /**
  * 한 판을 기록한다.
- * @param {{topic: string, score: number, outcome: string, stumbleAt: number|null}} game
+ * @param {{topic, score, outcome, stumbleAt, mode}} game
  *   score     : 그 판에서 쌓은 단어 수
  *   outcome   : 'win' | 'wrong' | 'timeout' | 'offtopic'
- *   stumbleAt : 몇 번째 단어에서 무너졌는지 (1부터). 이겼으면 null
+ *   stumbleAt : 몇 번째에서 무너졌는지 (1부터). 이겼으면 null
+ *   mode      : 'ai' | 'solo' | 'number'
+ *
+ * 모드를 함께 남기는 이유 : 숫자 15개를 외우는 것과 단어 15개를 외우는 것은
+ * 난이도가 달라서, 기록을 섞으면 추이가 뜻을 잃는다.
  */
 function recordGame(game) {
     const history = loadHistory();
@@ -44,6 +48,7 @@ function recordGame(game) {
         s: Number(game.score) || 0,
         o: game.outcome,
         m: game.stumbleAt == null ? null : Number(game.stumbleAt),
+        g: game.mode || 'ai',
     });
     // 오래된 것부터 버린다
     while (history.length > MAX_KEPT) history.shift();
@@ -53,11 +58,14 @@ function recordGame(game) {
     } catch (e) {
         // 저장 공간이 없으면 이번 판 기록은 포기한다. 게임은 계속돼야 한다.
     }
-    return summarize(history);
+    return summarize(game.mode || 'ai');
 }
 
-/** 화면에 보여줄 값들을 뽑는다 */
-function summarize(history = loadHistory()) {
+/** 화면에 보여줄 값들을 뽑는다. 모드별로 따로 센다. */
+function summarize(mode = 'ai', history = loadHistory()) {
+    // 예전 기록에는 모드가 없다. 그때는 AI 대결뿐이었다.
+    history = history.filter(g => (g.g || 'ai') === mode);
+
     const day = today();
     const todayGames = history.filter(g => g.d === day);
     const recent = history.slice(-10);
