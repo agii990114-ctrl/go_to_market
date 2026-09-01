@@ -622,13 +622,15 @@ async function judgeMyWord(word) {
         });
         if (token !== session) return;
 
-        if (res.duplicate) {
+        // 중복과 철자는 패배가 아니라 경고다. 다시 입력하면 된다.
+        if (res.duplicate || res.spelling) {
             phase = 'me';
             showMyTurn();
-            showFeedback('이미 나온 단어예요!', 'warn');
+            showFeedback(res.duplicate ? '이미 나온 ' + unitLabel() + '예요!' : (res.reason || '철자를 확인해 주세요.'), 'warn');
             shakeInput();
             $('word-input').select();
             startInputTimer();
+            focusActiveControl();
             return;
         }
 

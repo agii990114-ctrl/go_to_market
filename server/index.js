@@ -136,8 +136,32 @@ app.post('/api/judge', async (req, res, next) => {
             return res.json({ valid: false, duplicate: true, reason: '이미 나온 단어예요.' });
         }
 
-        const verdict = await judge(topic, word, readLang(req.body));
-        res.json({ valid: Boolean(verdict.valid), duplicate: false, reason: verdict.reason || '' });
+        const lang = readLang(req.body);
+
+        // 영어 모드에서만 철자를 본다.
+        //
+        // 모델은 오타를 알아서 고쳐 읽고 통과시킨다 — "towl" 에 대해
+        // "You would use a towel at a bathhouse" 라고 답한다. 기억력만 보면 큰 탈이
+        // 없지만, 단어장에 towl 이 실리면 잘못된 철자를 가르치는 셈이 된다.
+        //
+        // 한국어에는 걸지 않는다. 표제어 목록에 "방울토마토" 같은 일상어가 빠져 있어
+        // 멀쩡한 단어로 억울하게 지는 일이 생긴다.
+        //
+        // 그리고 탈락이 아니라 경고다. 중복과 같은 취급이라 다시 입력하면 된다.
+        if (lang === 'en') {
+            const bad = word.split(/\s+/).filter(w => w && !isRealWord(w, 'en'));
+            if (bad.length) {
+                return res.json({
+                    valid: false,
+                    duplicate: false,
+                    spelling: true,
+                    reason: `"${bad.join(', ')}" 은(는) 영어 사전에 없어요. 철자를 확인해 주세요.`,
+                });
+            }
+        }
+
+        const verdict = await judge(topic, word, lang);
+        res.json({ valid: Boolean(verdict.valid), duplicate: false, spelling: false, reason: verdict.reason || '' });
     } catch (err) {
         next(err);
     }
