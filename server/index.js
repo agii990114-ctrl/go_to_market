@@ -11,8 +11,9 @@ import { fileURLToPath } from 'node:url';
 
 import { MOCK, llmStatus, modelFor, providerFor, warmUpLocalModels } from './llm.js';
 import { cacheStats } from './verdict-cache.js';
-import { judge, suggestTopics, validateTopic } from './agents.js';
+import { judge, suggestTopics, validateTopic, generateWords } from './agents.js';
 import { checkTopicShape } from './topic.js';
+import { isRealWord } from './dictionary.js';
 import { isDuplicate, playAiTurn } from './game.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -21,12 +22,19 @@ const PORT = process.env.PORT || 3000;
 const REFEREE_ON_AI = process.env.REFEREE_ON_AI !== 'false';
 
 app.use(express.json({ limit: '64kb' }));
-app.use(express.static(path.join(here, '..', 'public')));
+// 프런트 파일은 캐시하지 않는다.
+// 고친 뒤 새로고침해도 브라우저가 옛 game.js 를 들고 있어 "함수가 없다" 는
+// 엉뚱한 오류로 시간을 버린 적이 있다. 로컬 전용 서버라 캐시로 얻을 것도 없다.
+app.use(express.static(path.join(here, '..', 'public'), {
+    etag: false,
+    lastModified: false,
+    setHeaders: res => res.setHeader('Cache-Control', 'no-store'),
+}));
 
 /* 요청 본문 검증 : 주제와 단어 길이를 서버에서도 한 번 더 막는다 */
 function readTopic(body) {
     const topic = String(body?.topic ?? '').trim();
-    if (!topic || topic.length > 20) throw badRequest('주제는 1~20자로 보내주세요.');
+    if (!topic || topic.length > 24) throw badRequest('주제는 1~24자로 보내주세요.');
     return topic;
 }
 
@@ -34,6 +42,11 @@ function readWords(body) {
     const words = Array.isArray(body?.usedWords) ? body.usedWords : [];
     if (words.length > 300) throw badRequest('단어 목록이 너무 깁니다.');
     return words.map(w => String(w).trim()).filter(Boolean);
+}
+
+/** 언어는 'ko' 아니면 'en' 둘뿐이다 */
+function readLang(body) {
+    return body?.lang === 'en' ? 'en' : 'ko';
 }
 
 function badRequest(message) {
@@ -61,9 +74,10 @@ app.post('/api/topics', async (req, res, next) => {
     try {
         // 작은 모델은 가끔 빈 배열이나 영어·기호가 섞인 것을 돌려준다.
         // 걸러 낸 뒤 너무 적으면 한 번만 더 물어본다.
-        let topics = cleanTopics(await suggestTopics());
+        const lang = readLang(req.body);
+        let topics = cleanTopics(await suggestTopics(lang), lang);
         if (topics.length < 3) {
-            topics = [...new Set([...topics, ...cleanTopics(await suggestTopics())])];
+            topics = [...new Set([...topics, ...cleanTopics(await suggestTopics(lang), lang)])];
         }
         res.json({ topics: topics.slice(0, 5) });
     } catch (err) {
@@ -74,11 +88,13 @@ app.post('/api/topics', async (req, res, next) => {
 // 추천도 사람 입력과 같은 관문을 통과해야 한다.
 // 모델이 "시장과일" 같은 조어를 계속 만들어 내는데, 검증에서 되돌려 보낼
 // 주제를 추천 목록에 올리면 앞뒤가 안 맞는다.
-function cleanTopics(result) {
+function cleanTopics(result, lang = 'ko') {
+    const shape = lang === 'en' ? /^[a-zA-Z ]{2,16}$/ : /^[가-힣 ]{2,12}$/;
     return (result?.topics || [])
         .map(t => String(typeof t === 'string' ? t : t?.topic ?? '').trim())
-        .filter(t => /^[가-힣 ]{2,12}$/.test(t))
-        .filter(t => checkTopicShape(t).ok);
+        .map(t => (lang === 'en' ? t.toLowerCase() : t))
+        .filter(t => shape.test(t))
+        .filter(t => checkTopicShape(t, lang).ok);
 }
 
 /* -----------------------------------------------------------
@@ -87,13 +103,14 @@ function cleanTopics(result) {
 app.post('/api/topic-check', async (req, res, next) => {
     try {
         const topic = String(req.body?.topic ?? '').trim();
+        const lang = readLang(req.body);
 
-        const shape = checkTopicShape(topic);
+        const shape = checkTopicShape(topic, lang);
         if (!shape.ok) {
             return res.json({ ok: false, reason: shape.reason, byCode: true });
         }
 
-        const verdict = await validateTopic(topic);
+        const verdict = await validateTopic(topic, lang);
         res.json({
             ok: verdict.isPlace,
             reason: verdict.reason,
@@ -119,7 +136,7 @@ app.post('/api/judge', async (req, res, next) => {
             return res.json({ valid: false, duplicate: true, reason: '이미 나온 단어예요.' });
         }
 
-        const verdict = await judge(topic, word);
+        const verdict = await judge(topic, word, readLang(req.body));
         res.json({ valid: Boolean(verdict.valid), duplicate: false, reason: verdict.reason || '' });
     } catch (err) {
         next(err);
@@ -134,7 +151,7 @@ app.post('/api/ai-turn', async (req, res, next) => {
     try {
         const topic = readTopic(req.body);
         const usedWords = readWords(req.body);
-        const result = await playAiTurn(topic, usedWords, REFEREE_ON_AI);
+        const result = await playAiTurn(topic, usedWords, REFEREE_ON_AI, readLang(req.body));
         res.json(result);
     } catch (err) {
         next(err);
@@ -144,6 +161,50 @@ app.post('/api/ai-turn', async (req, res, next) => {
 /* -----------------------------------------------------------
    에러 처리 : 게임을 끝내지 말고 프런트가 재시도할 수 있게 한다
 ----------------------------------------------------------- */
+/* -----------------------------------------
+   단어장 : 한 판이 끝나면 그 주제의 단어를 모아 준다.
+   게임에서 쌓은 단어가 목표에 못 미치면 같은 주제의 단어로 채워 준다.
+----------------------------------------- */
+app.post('/api/wordbook', async (req, res, next) => {
+    try {
+        const topic = readTopic(req.body);
+        const lang = readLang(req.body);
+        const target = Math.min(30, Math.max(1, parseInt(req.body?.target, 10) || 10));
+
+        // 게임에서 나온 것들이 먼저다. 방금 외운 것이라 복습 가치가 가장 높다.
+        const played = (Array.isArray(req.body?.words) ? req.body.words : [])
+            .map(w => ({
+                word: String(w?.word ?? '').trim(),
+                gloss: String(w?.gloss ?? '').trim(),
+                fromGame: true,
+            }))
+            .filter(w => w.word);
+
+        const seen = new Set(played.map(w => w.word.toLowerCase()));
+        const out = [...played];
+
+        // 모자란 만큼만 새로 받는다. 두 번 채워도 안 차면 있는 만큼만 준다.
+        for (let round = 0; out.length < target && round < 2; round++) {
+            const need = target - out.length;
+            const result = await generateWords(topic, [...seen], Math.max(need + 5, 10), lang);
+
+            for (const raw of result?.words || []) {
+                if (out.length >= target) break;
+                const word = String(typeof raw === 'string' ? raw : raw?.word ?? '').trim();
+                const gloss = String(typeof raw === 'string' ? '' : raw?.gloss ?? '').trim();
+                if (!word || seen.has(word.toLowerCase())) continue;
+                if (!isRealWord(word, lang)) continue;
+                seen.add(word.toLowerCase());
+                out.push({ word: lang === 'en' ? word.toLowerCase() : word, gloss, fromGame: false });
+            }
+        }
+
+        res.json({ topic, lang, words: out, target });
+    } catch (err) {
+        next(err);
+    }
+});
+
 app.use((err, req, res, next) => {
     const status = err.status || err.statusCode || 500;
     if (status >= 500) console.error('[api]', err);

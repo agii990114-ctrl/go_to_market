@@ -71,6 +71,106 @@ const RUBRIC = `[판정 기준]
 - reason 은 40자 이내의 한 문장으로 짧게 쓴다.
 - 같은 말을 두 번 쓰지 않는다. 설명을 늘이지 않는다.`;
 
+/*
+ * 영어판 판정 기준.
+ * 한국어판에서 얻은 것들을 그대로 옮겼다 — 기본은 통과, 반갑지 않은 것도 통과,
+ * 탈락은 "이어지는 지점이 없다" 와 "계절·환경이 반대다" 둘뿐,
+ * "있기는 한데 관련성이 부족하다" 같은 자기모순 사유 금지.
+ */
+const RUBRIC_EN = `[How to judge]
+1. Pass by default. Fail only when there is no connection at all.
+2. If a Korean speaker would nod at "At the <topic> there is <word>", it passes.
+3. Anything inside the place, stored there, sold there, done there,
+   heard or smelled there, or any person who is there — all pass.
+4. Figurative or cultural associations pass if they are not far-fetched.
+5. **Anything that can actually be there passes, even if unwelcome** —
+   weeds, dust, noise, mould, rubbish. "It is there but undesirable" is not a reason to fail.
+6. There are only two reasons to fail.
+   (a) There is no connection at all.   e.g. fridge / volcano, market / calculus
+   (b) The season or environment is the opposite, so it would not be there.
+       e.g. summer / snowman (that is winter), fridge / furnace (that heats)
+   Anything else passes.
+7. Fail if it looks like random keyboard mashing.
+8. Judge topic fit only. Never consider whether the word was already used —
+   the game code handles duplicates separately.
+9. Minor spelling slips pass if the word is recognisable.
+
+[Examples]
+topic "fridge"    / "meat"     -> pass. People keep meat in a fridge.
+topic "fridge"    / "milk"     -> pass. Milk is the classic thing to refrigerate.
+topic "fridge"    / "volcano"  -> fail. There is no connection at all.
+topic "market"    / "haggling" -> pass. It is the scene a market brings to mind.
+topic "market"    / "wallet"   -> pass. You take one with you to the market.
+topic "market"    / "calculus" -> fail. Nothing connects it to a market.
+topic "orchard"   / "weeds"    -> pass. Unwelcome, but they really grow there.
+topic "bathhouse" / "steam"    -> pass. Steam fills a bathhouse.
+topic "summer"    / "snowman"  -> fail. That belongs to winter, the opposite season.
+topic "library"   / "asdfgh"   -> fail. That is keyboard mashing.
+
+"It is stored there", "it is used there", "it is sold there", "it grows there"
+are each reason enough on their own.
+"Not directly related" belongs only to cases like "volcano" and "calculus".
+"It gets in the way", "it is undesirable", "it does not belong" are NOT reasons to fail.
+Above all, "it can be there but is not directly related" is a contradiction.
+If it can be there, it passes. The moment you find yourself writing
+"it could be there, but", the answer is pass.
+
+[Output] reason must be one short English sentence, under 12 words.`;
+
+/* 영어판 장소 기준 */
+const PLACE_RULE_EN = `[What can be a topic]
+A **space that has things inside it**, so that "At the <topic> there is ~" sounds natural.
+
+Good: market, zoo, school, hospital, library, bathhouse, playground, bakery,
+      butcher, sea, mountain, kitchen, classroom, fridge, drawer, backpack, subway
+Bad:  summer, winter (a time, not a space)
+      game, love, memory (an idea or a feeling)
+      red, round (a quality)
+      Beethoven, Newton (a person)
+
+There must be things that can be inside it. Times, feelings and ideas do not count.`;
+
+/* 영어판 생성 예시 */
+const FEW_SHOT_EN = `[Good and bad answers]
+
+topic "market", already used: fish
+  good: haggling, anchovy, scale, basket, cart, vendor
+  bad:  fishmarket (contains "fish"), marketnoise (not a real word), market (the topic itself)
+
+topic "fridge", already used: kimchi
+  good: egg, milk, leftovers, frost, ice
+  bad:  kimchibox (contains "kimchi"), fridgedoor (contains the topic), coldshelf (not a real word)
+
+topic "zoo", already used: elephant
+  good: keeper, cage, feed, monkey, ticket
+  bad:  elephanttrunk, zoopath, lioncage (not real words)
+
+The point: only words a dictionary would list. Never glue two words together.`;
+
+/* 영어 생성은 한글 뜻을 함께 받는다 — 영단어 공부용으로 쓰기 위해서다 */
+const WORD_LIST_SCHEMA_EN = {
+    type: 'object',
+    properties: {
+        words: {
+            type: 'array',
+            description: 'English words that fit the place, each with a short Korean meaning',
+            minItems: 5,
+            maxItems: 30,
+            items: {
+                type: 'object',
+                properties: {
+                    word: { type: 'string', maxLength: 16, description: 'lowercase English word' },
+                    gloss: { type: 'string', maxLength: 14, description: 'Korean meaning, 2-6 characters' },
+                },
+                required: ['word', 'gloss'],
+                additionalProperties: false,
+            },
+        },
+    },
+    required: ['words'],
+    additionalProperties: false,
+};
+
 const VERDICT_SCHEMA = {
     type: 'object',
     properties: {
@@ -167,14 +267,28 @@ function tidyVerdict(verdict) {
 /* -----------------------------------------------------------
    심판 : 공식 판정
 ----------------------------------------------------------- */
-export function judge(topic, word) {
+export function judge(topic, word, lang = 'ko') {
     return cachedVerdict(
-        { role: 'judge', model: modelFor('judge'), topic, word },
-        () => askJsonJudge(topic, word),
+        { role: 'judge', model: modelFor('judge'), topic: lang + ':' + topic, word },
+        () => askJsonJudge(topic, word, lang),
     );
 }
 
-function askJsonJudge(topic, word) {
+function askJsonJudge(topic, word, lang) {
+    if (lang === 'en') {
+        return askJson({
+            role: 'judge',
+            maxTokens: 400,
+            system: `You are the judge of the Korean word game "When I go to the market".
+Decide only whether the submitted word fits the topic.
+Look for a reason to pass first. Fail only when you cannot find one.
+Be generous but consistent — the same word must always get the same verdict.
+
+${RUBRIC_EN}`,
+            user: `Topic: "${topic}"\nnSubmitted word: "${word}"\nn\nnDoes this word fit the topic?`,
+            schema: VERDICT_SCHEMA,
+        }).then(tidyVerdict);
+    }
     return askJson({
         role: 'judge',
         maxTokens: 400,
@@ -193,14 +307,27 @@ ${RUBRIC}`,
    검수 : 플레이어 AI 의 단어를 채택 전에 거른다
    심판과 완전히 별개의 호출이고, 그 단어를 왜 골랐는지는 알려주지 않는다.
 ----------------------------------------------------------- */
-export function inspect(topic, word) {
+export function inspect(topic, word, lang = 'ko') {
     return cachedVerdict(
-        { role: 'inspect', model: modelFor('inspect'), topic, word },
-        () => askJsonInspect(topic, word),
+        { role: 'inspect', model: modelFor('inspect'), topic: lang + ':' + topic, word },
+        () => askJsonInspect(topic, word, lang),
     );
 }
 
-function askJsonInspect(topic, word) {
+function askJsonInspect(topic, word, lang) {
+    if (lang === 'en') {
+        return askJson({
+            role: 'inspect',
+            maxTokens: 400,
+            system: `You are the checker of the Korean word game "When I go to the market".
+You only confirm, independently, whether a word fits the topic.
+You do not know who submitted it or why, and you do not need to.
+
+${RUBRIC_EN}`,
+            user: `Topic: "${topic}"\nnWord to check: "${word}"\nn\nnDoes this word fit the topic?`,
+            schema: VERDICT_SCHEMA,
+        }).then(tidyVerdict);
+    }
     return askJson({
         role: 'inspect',
         maxTokens: 400,
@@ -235,7 +362,9 @@ const FEW_SHOT = `[좋은 답과 나쁜 답의 예]
 /* -----------------------------------------------------------
    플레이어 AI : 새 단어를 한 번에 여러 개 생성
 ----------------------------------------------------------- */
-export function generateWords(topic, usedWords, count = 20) {
+export function generateWords(topic, usedWords, count = 20, lang = 'ko') {
+    if (lang === 'en') return generateWordsEn(topic, usedWords, count);
+
     const usedBlock = usedWords.length ? usedWords.join(', ') : '(아직 없음)';
 
     return askJson({
@@ -261,6 +390,39 @@ ${FEW_SHOT}`,
     });
 }
 
+/**
+ * 영어 낱말을 한글 뜻과 함께 받는다.
+ *
+ * 뜻을 별도 호출로 번역하면 느려진다. 어차피 부르는 생성 호출에 칸을 하나 더 얹는 게 공짜다.
+ * (심판 호출에도 얹어 봤지만 거기선 불안정했다 — calculus 의 뜻을 "시장" 이라고 답했다.
+ *  판정에 집중하느라 단어 대신 주제를 번역해 버린다.)
+ */
+function generateWordsEn(topic, usedWords, count) {
+    const usedBlock = usedWords.length ? usedWords.join(', ') : '(none yet)';
+
+    return askJson({
+        role: 'generate',
+        maxTokens: 1400,
+        system: `You are a player of the Korean word game "When I go to the market".
+List English words that fit the place, each with a short Korean meaning.
+
+[Rules]
+- Never use a word from the already-used list. Avoid close synonyms of them too.
+- Never use the topic itself. Name things found inside the place.
+- Pick everyday English nouns a learner can memorise. One word, lowercase.
+- **Only words an English dictionary would list. Never glue two words together.**
+- No formatting, no quotes, no punctuation. Just the word.
+- gloss: the Korean meaning, 2 to 6 Korean characters. No romanisation, no English.
+- Spread out — objects, people, actions, sounds, smells, tools.
+- Mix obvious ones with less obvious ones.
+
+${FEW_SHOT_EN}`,
+        user: `Topic: "${topic}"\nAlready used: ${usedBlock}\n\n`
+            + `List ${count} different words with their Korean meanings.`,
+        schema: WORD_LIST_SCHEMA_EN,
+    });
+}
+
 /*
  * 장소 기준 — 주제 추천과 주제 검증이 글자 그대로 공유한다.
  * 추천이 만들어 낸 주제를 검증이 되돌려 보내면 안 되므로 기준이 같아야 한다.
@@ -281,16 +443,36 @@ const PLACE_RULE = `[주제가 될 수 있는 것]
 /* -----------------------------------------------------------
    주제 검증 : 사람이 직접 쓴 주제가 장소인지 본다
 ----------------------------------------------------------- */
-export function validateTopic(topic) {
+export function validateTopic(topic, lang = 'ko') {
     // 같은 주제를 다시 고를 때 2~3초를 또 기다릴 이유가 없다.
     // 판정과 같은 캐시를 쓰되 역할 이름으로 키를 갈라 둔다.
     return cachedVerdict(
-        { role: 'topic-check', model: modelFor('judge'), topic, word: '' },
-        () => askTopicIsPlace(topic),
+        { role: 'topic-check', model: modelFor('judge'), topic: lang + ':' + topic, word: '' },
+        () => askTopicIsPlace(topic, lang),
     ).then(v => ({ isPlace: v.valid, reason: v.reason }));
 }
 
-function askTopicIsPlace(topic) {
+function askTopicIsPlace(topic, lang) {
+    if (lang === 'en') {
+        return askJson({
+            role: 'judge',
+            maxTokens: 300,
+            system: `You are the host of the Korean word game "When I go to the market".
+Decide only whether the topic can be used for this game.
+
+${PLACE_RULE_EN}
+
+When in doubt, allow it. But times, feelings, ideas and people are clearly not allowed.
+
+[Output] reason must be one short Korean sentence, under 30 characters.
+If you reject it, say briefly why in Korean.`,
+            user: `Topic candidate: "${topic}"\nn\nnCan this be used as a place topic?`,
+            schema: PLACE_SCHEMA,
+        }).then(v => ({
+            valid: Boolean(v?.isPlace),
+            reason: String(v?.reason ?? '').replace(/[*_`~<>]/g, '').trim(),
+        }));
+    }
     return askJson({
         role: 'judge',
         maxTokens: 300,
@@ -314,7 +496,27 @@ ${PLACE_RULE}
 /* -----------------------------------------------------------
    주제 추천
 ----------------------------------------------------------- */
-export function suggestTopics() {
+export function suggestTopics(lang = 'ko') {
+    if (lang === 'en') {
+        return askJson({
+            role: 'topics',
+            maxTokens: 800,
+            system: `You are the host of the Korean word game "When I go to the market".
+Suggest 5 places for the game.
+
+${PLACE_RULE_EN}
+
+[Rules]
+- Pick places anyone knows, where at least 20 words come to mind easily.
+- **Only words an English dictionary would list. Never invent compounds.**
+- Mix one obvious place (market, zoo) with less obvious ones (bathhouse, drawer, attic).
+- 2 to 16 letters, lowercase. No explanations, no punctuation.
+- Suggest a different set each time.`,
+            user: 'List 5 places only.',
+            schema: TOPICS_SCHEMA,
+        });
+    }
+
     return askJson({
         role: 'topics',
         maxTokens: 800,

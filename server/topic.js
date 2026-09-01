@@ -18,7 +18,7 @@ import { isRealWord } from './dictionary.js';
 
 const MAX_TOKENS = 3;
 
-/** "할머니 댁" 처럼 띄어 쓴 주제를 낱말로 쪼갠다 */
+/** "할머니 댁", "public bath" 처럼 띄어 쓴 주제를 낱말로 쪼갠다 */
 export function splitTopic(topic) {
     return String(topic ?? '').trim().split(/\s+/).filter(Boolean);
 }
@@ -30,16 +30,17 @@ export function splitTopic(topic) {
  * 지어내는 일이 잦았다. 낱말 단위로 보면 결정론적으로 걸러진다.
  * 사전을 받아 두지 않았으면 isRealWord() 가 언제나 true 라 이 검사는 꺼진다.
  */
-export function findCoinedWords(topic) {
-    return splitTopic(topic).filter(w => !isRealWord(w));
+export function findCoinedWords(topic, lang = 'ko') {
+    return splitTopic(topic).filter(w => !isRealWord(w, lang));
 }
 
 /**
  * 모델에게 묻기 전에 코드가 먼저 볼 수 있는 것들.
  * @returns {{ok: boolean, reason?: string}}
  */
-export function checkTopicShape(topic) {
+export function checkTopicShape(topic, lang = 'ko') {
     const tokens = splitTopic(topic);
+    const isEn = (lang === 'en');
 
     if (tokens.length === 0) {
         return { ok: false, reason: '주제를 입력해주세요.' };
@@ -47,18 +48,20 @@ export function checkTopicShape(topic) {
     if (tokens.length > MAX_TOKENS) {
         return { ok: false, reason: '주제는 세 낱말 이내로 짧게 써주세요.' };
     }
-    if (topic.length > 20) {
-        return { ok: false, reason: '주제는 20자 이내로 써주세요.' };
-    }
-    if (!/^[가-힣0-9 ]+$/.test(topic.trim())) {
-        return { ok: false, reason: '주제는 한글로 써주세요.' };
+    if (topic.length > 24) {
+        return { ok: false, reason: '주제는 24자 이내로 써주세요.' };
     }
 
-    const coined = findCoinedWords(topic);
+    const shape = isEn ? /^[a-zA-Z0-9 ]+$/ : /^[가-힣0-9 ]+$/;
+    if (!shape.test(topic.trim())) {
+        return { ok: false, reason: isEn ? '주제는 영어로 써주세요.' : '주제는 한글로 써주세요.' };
+    }
+
+    const coined = findCoinedWords(topic, lang);
     if (coined.length) {
         return {
             ok: false,
-            reason: `"${coined.join(', ')}" 은(는) 국어사전에 없는 말이에요. `
+            reason: `"${coined.join(', ')}" 은(는) ${isEn ? '영어 사전' : '국어사전'}에 없는 말이에요. `
                 + '실제로 쓰는 낱말로 써주세요.',
         };
     }

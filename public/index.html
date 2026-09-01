@@ -893,6 +893,68 @@
 
         .modal-actions .btn { width: 100%; }
 
+        /* 영어 모드 : 단어 밑의 한글 뜻 */
+        .reveal-gloss {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--sub);
+            margin-top: -6px;
+        }
+
+        .word-chip .gloss {
+            color: var(--sub);
+            font-weight: 500;
+            font-size: 0.72rem;
+            margin-left: 4px;
+        }
+
+        /* 단어장 */
+        .book-list {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            max-height: 240px;
+            overflow-y: auto;
+            padding: 10px;
+            background: var(--inset-bg);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+        }
+
+        .book-row {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            padding: 6px 8px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+
+        .book-row.from-game {
+            background: var(--accent-soft);
+            border-color: var(--accent-line);
+        }
+
+        .book-row .w {
+            font-size: 0.92rem;
+            font-weight: 800;
+            color: var(--text);
+            min-width: 96px;
+        }
+
+        .book-row .g { font-size: 0.8rem; color: var(--sub); flex: 1; }
+
+        .book-row .tag {
+            font-size: 0.62rem;
+            font-weight: 700;
+            color: var(--accent-text);
+            flex-shrink: 0;
+        }
+
+        .book-empty { color: var(--sub); font-size: 0.8rem; text-align: center; padding: 10px; }
+
         .topic-status {
             font-size: 0.78rem;
             line-height: 1.5;
@@ -1167,6 +1229,12 @@
             </div>
             <div class="trend-note hidden" id="home-trend"></div>
 
+            <div class="field-label">언어</div>
+            <div class="seg seg-wide">
+                <button class="seg-btn" id="lang-ko" onclick="pickLang('ko')">🇰🇷 한국어</button>
+                <button class="seg-btn" id="lang-en" onclick="pickLang('en')">🇺🇸 English</button>
+            </div>
+
             <div class="field-label">모드</div>
             <div class="seg seg-wide">
                 <button class="seg-btn" id="mode-ai" onclick="pickMode('ai')">🤖 AI 대결</button>
@@ -1198,6 +1266,7 @@
             </div>
 
             <button class="btn btn-primary" id="start-btn" onclick="startNewGame()">게임 시작</button>
+            <button class="btn hidden" id="my-books-btn" onclick="openSavedBooks()">📚 내 단어장</button>
         </div>
     </main>
 
@@ -1258,6 +1327,7 @@
         <div class="reveal-card hidden" id="reveal-area">
             <div class="reveal-cap">🤖 AI 가 추가한 단어</div>
             <div class="reveal-word" id="reveal-word"></div>
+            <div class="reveal-gloss hidden" id="reveal-gloss"></div>
             <div class="reveal-note">이 단어도 외워야 해요. 확인을 누르면 사라집니다.</div>
             <button class="btn btn-primary" id="reveal-ok" onclick="closeReveal()">확인했어요</button>
         </div>
@@ -1297,8 +1367,22 @@
             <div class="word-list hidden" id="result-words"></div>
 
             <div class="modal-actions">
+                <button class="btn hidden" id="book-btn" onclick="makeWordbook()">📚 단어장 만들기</button>
                 <button class="btn hidden" id="resume-btn" onclick="resumeGame()">✏️ 그 자리부터 이어하기</button>
                 <button class="btn btn-primary" onclick="restartGame()">🔄 새 게임</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-back" id="book-modal">
+        <div class="modal">
+            <div class="modal-emoji">📚</div>
+            <div class="modal-title" id="book-title">단어장</div>
+            <div class="modal-reason" id="book-note"></div>
+            <div class="book-list" id="book-list"></div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" id="book-save" onclick="saveWordbook()">💾 저장</button>
+                <button class="btn" onclick="closeWordbook()">닫기</button>
             </div>
         </div>
     </div>

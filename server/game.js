@@ -25,33 +25,37 @@ const poolByTopic = new Map();
 const BATCH_SIZE = 20;
 const MAX_REFILLS = 3;   // 이만큼 새로 받아도 쓸 게 없으면 주제가 바닥난 것으로 본다
 
-function poolFor(topic) {
-    const key = normalize(topic);
+function poolFor(topic, lang = 'ko') {
+    const key = lang + ':' + normalize(topic);
     if (!poolByTopic.has(key)) poolByTopic.set(key, []);
     return poolByTopic.get(key);
 }
 
 /** 풀을 새로 채운다. 이미 걸러진 것은 넣지 않는다. */
-async function refillPool(topic, usedWords, log) {
-    const pool = poolFor(topic);
+async function refillPool(topic, usedWords, log, lang) {
+    const pool = poolFor(topic, lang);
     const before = pool.length;
 
     let result;
     try {
-        result = await generateWords(topic, usedWords, BATCH_SIZE);
+        result = await generateWords(topic, usedWords, BATCH_SIZE, lang);
     } catch (e) {
         log.push({ stage: '생성', word: null, passed: false, reason: e.message });
         return 0;
     }
 
     for (const raw of result?.words || []) {
-        const word = cleanWord(raw);
+        // 영어 생성은 { word, gloss } 로 온다. 한국어는 문자열이다.
+        const word = cleanWord(typeof raw === 'string' ? raw : raw?.word);
+        const gloss = typeof raw === 'string' ? '' : cleanWord(raw?.gloss);
+
         // 아이디어가 떨어지면 모델이 "%FISH%", ">>KNIF<<", ".RECORD" 같은
         // 아스키 쓰레기를 섞어 보낸다. 어차피 사전에서 걸리지만, 풀에 들이지 않는다.
-        if (!/^[가-힣]{2,8}$/.test(word)) continue;
+        const shape = lang === 'en' ? /^[a-zA-Z][a-zA-Z]{1,15}$/ : /^[가-힣]{2,8}$/;
+        if (!shape.test(word)) continue;
         if (!isUsableWord(word)) continue;
-        if (pool.some(w => normalize(w) === normalize(word))) continue;
-        pool.push(word);
+        if (pool.some(e => normalize(e.word) === normalize(word))) continue;
+        pool.push({ word: lang === 'en' ? word.toLowerCase() : word, gloss });
     }
     return pool.length - before;
 }
@@ -124,9 +128,9 @@ export function containsExistingWord(word, usedWords, topic) {
  * @param {boolean} refereeOnAi 검수 통과 후 심판까지 한 번 더 거칠지
  * @returns {{outcome:'ok'|'exhausted', word?:string, attempts:number, log:Array}}
  */
-export async function playAiTurn(topic, usedWords, refereeOnAi = true) {
+export async function playAiTurn(topic, usedWords, refereeOnAi = true, lang = 'ko') {
     const log = [];
-    const pool = poolFor(topic);
+    const pool = poolFor(topic, lang);
     let refills = 0;
     let calls = 0;
 
@@ -138,11 +142,13 @@ export async function playAiTurn(topic, usedWords, refereeOnAi = true) {
             }
             refills++;
             calls++;
-            const added = await refillPool(topic, usedWords, log);
+            const added = await refillPool(topic, usedWords, log, lang);
             if (added === 0) continue;   // 하나도 못 건졌다 → 다음 회차에서 다시 채우거나 포기
         }
 
-        const word = pool.shift();
+        const picked = pool.shift();
+        const word = picked.word;
+        const gloss = picked.gloss || '';
 
         // --- 코드가 내리는 판정. 전부 0ms 이므로 마음껏 거른다. ---
 
@@ -160,7 +166,7 @@ export async function playAiTurn(topic, usedWords, refereeOnAi = true) {
         }
         // 사전 검사는 AI 단어에만 건다. 사람 단어에는 걸지 않는다 —
         // 표제어에 "방울토마토" 같은 일상어가 빠져 있어서 억울한 패배가 나온다.
-        if (!isRealWord(word)) {
+        if (!isRealWord(word, lang)) {
             log.push({ stage: '사전', word, passed: false, reason: '사전에 없는 말' });
             continue;
         }
@@ -168,7 +174,7 @@ export async function playAiTurn(topic, usedWords, refereeOnAi = true) {
         // --- 여기서부터 모델에게 묻는다 ---
 
         calls++;
-        const check = await inspect(topic, word);
+        const check = await inspect(topic, word, lang);
         if (!check.valid) {
             log.push({ stage: '검수', word, passed: false, reason: check.reason });
             continue;
@@ -179,7 +185,7 @@ export async function playAiTurn(topic, usedWords, refereeOnAi = true) {
         // 그때 심판은 검증이 아니라 대기 시간일 뿐이라 건너뛴다.
         if (refereeOnAi && !isSameEngine('inspect', 'judge')) {
             calls++;
-            const verdict = await judge(topic, word);
+            const verdict = await judge(topic, word, lang);
             if (!verdict.valid) {
                 log.push({ stage: '심판', word, passed: false, reason: verdict.reason });
                 continue;
@@ -187,6 +193,6 @@ export async function playAiTurn(topic, usedWords, refereeOnAi = true) {
             log.push({ stage: '심판', word, passed: true, reason: verdict.reason });
         }
 
-        return { outcome: 'ok', word, attempts: calls, log };
+        return { outcome: 'ok', word, gloss, attempts: calls, log };
     }
 }

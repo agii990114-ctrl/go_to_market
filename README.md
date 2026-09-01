@@ -20,7 +20,7 @@ winget install --id Ollama.Ollama --exact
 ```
 
 ```bash
-ollama pull exaone3.5:7.8b
+ollama pull gemma3:4b
 ```
 
 `ollama serve` 는 설치 시 백그라운드 서비스로 함께 등록됩니다.
@@ -36,7 +36,8 @@ npm install
 cp .env.example .env
 ```
 
-국어사전 표제어 목록을 받습니다(4MB, 한 번만). 이걸 건너뛰면 AI 가 지어낸 말을 걸러내지 못합니다.
+사전 표제어 목록을 받습니다(한국어 4MB + 영어 3.6MB, 한 번만).
+이걸 건너뛰면 AI 가 지어낸 말을 걸러내지 못합니다.
 
 ```bash
 npm run setup:dict
@@ -275,7 +276,7 @@ data/            받아 온 단어 목록 (git 에 올리지 않음)
 | 변수 | 기본값 | 설명 |
 |---|---|---|
 | `LLM_PROVIDER` | `ollama` | `ollama` (로컬) 또는 `anthropic` (클라우드) |
-| `OLLAMA_MODEL` | `exaone3.5:7.8b` | 로컬 기본 모델 |
+| `OLLAMA_MODEL` | `gemma3:4b` | 로컬 기본 모델. 한국어·영어를 모두 한다 |
 | `OLLAMA_KEEP_ALIVE` | `30m` | 모델을 VRAM 에 붙잡아 두는 시간 |
 | `ANTHROPIC_API_KEY` | — | 클라우드를 쓸 때만 필요 |
 | `REFEREE_ON_AI` | `true` | AI 단어가 검수를 통과한 뒤 심판까지 한 번 더 거칠지 |

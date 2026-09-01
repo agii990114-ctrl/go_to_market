@@ -20,12 +20,13 @@ let pendingRetry = null;  // 통신이 실패했을 때 다시 시도할 동작
  *   'number' 정해진 범위에서 숫자가 하나씩 제시된다. 외우기만 하면 된다.
  */
 let mode = 'ai';
+let lang = 'ko';            // 'ko' | 'en' — 영어 모드는 단어 밑에 한글 뜻이 함께 나온다
 let pendingNumber = null;   // 숫자 모드에서 지금 제시 중인 숫자
 let retryCount = 0;         // 이번 판에서 '이어하기' 를 쓴 횟수
 let lastReason = '';        // 마지막 게임 오버 사유
 
 // 설정값 (기본값 : 라이트 테마 / 제한 시간 꺼짐 / 입력 1개당 5초)
-let settings = { timerEnabled: false, seconds: 5, mode: 'ai', min: 1, max: 99 };
+let settings = { timerEnabled: false, seconds: 5, mode: 'ai', lang: 'ko', min: 1, max: 99 };
 let theme = 'light';
 
 // 설정 패널에서 저장을 누르기 전까지의 임시값
@@ -143,6 +144,137 @@ function applySettings() {
 }
 
 /* -----------------------------------------
+   단어장
+
+   한 판이 끝나면 그 주제의 단어를 모아 둔다.
+   게임에서 쌓은 단어가 목표에 못 미치면 서버가 같은 주제의 단어로 채워 준다.
+   외운 단어를 그냥 흘려보내지 않고 나중에 다시 볼 수 있게 하는 것이 목적이다.
+----------------------------------------- */
+const BOOKS_KEY = 'market_wordbooks';
+const BOOK_TARGET = 10;
+
+let pendingBook = null;   // 지금 보고 있는(아직 저장 전) 단어장
+
+function loadBooks() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(BOOKS_KEY));
+        return Array.isArray(raw) ? raw : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+/** 결과 화면에서 '단어장 만들기' — 모자란 만큼 서버가 채워 준다 */
+async function makeWordbook() {
+    const btn = $('book-btn');
+    btn.disabled = true;
+    btn.innerText = '📚 단어를 모으는 중…';
+
+    try {
+        const res = await api('/api/wordbook', {
+            topic,
+            lang,
+            target: BOOK_TARGET,
+            words: entries.map(e => ({ word: e.word, gloss: e.gloss || '' })),
+        });
+        pendingBook = {
+            topic,
+            lang,
+            at: new Date().toISOString().slice(0, 10),
+            words: res.words || [],
+        };
+        showWordbook(pendingBook, true);
+    } catch (err) {
+        alert('단어장을 만들지 못했어요. ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = '📚 단어장 만들기';
+    }
+}
+
+function showWordbook(book, savable) {
+    const fromGame = book.words.filter(w => w.fromGame).length;
+
+    $('book-title').innerText = book.topic + ' 단어장';
+    $('book-note').innerHTML = book.words.length + '개 · 게임에서 나온 것 <b>' + fromGame + '개</b>'
+        + (book.words.length > fromGame ? ' + 같은 주제로 채운 것 ' + (book.words.length - fromGame) + '개' : '')
+        + (book.at ? '<br>' + escapeHtml(book.at) : '');
+
+    $('book-list').innerHTML = book.words.length
+        ? book.words.map(w =>
+            '<div class="book-row' + (w.fromGame ? ' from-game' : '') + '">'
+            + '<span class="w">' + escapeHtml(w.word) + '</span>'
+            + '<span class="g">' + escapeHtml(w.gloss || '') + '</span>'
+            + (w.fromGame ? '<span class="tag">게임</span>' : '')
+            + '</div>').join('')
+        : '<div class="book-empty">단어가 없어요.</div>';
+
+    $('book-save').classList.toggle('hidden', !savable);
+    $('book-modal').classList.add('open');
+}
+
+function saveWordbook() {
+    if (!pendingBook) return;
+    const books = loadBooks();
+    books.push(pendingBook);
+    // 너무 많이 쌓이면 오래된 것부터 버린다
+    while (books.length > 50) books.shift();
+
+    try {
+        localStorage.setItem(BOOKS_KEY, JSON.stringify(books));
+    } catch (e) {
+        alert('저장 공간이 모자라 저장하지 못했어요.');
+        return;
+    }
+    pendingBook = null;
+    $('book-save').classList.add('hidden');
+    $('book-note').innerHTML = '✅ 저장했어요. 시작 화면의 <b>📚 내 단어장</b> 에서 다시 볼 수 있어요.';
+    $('my-books-btn').classList.remove('hidden');
+}
+
+function closeWordbook() {
+    $('book-modal').classList.remove('open');
+    pendingBook = null;
+}
+
+/** 시작 화면 : 저장해 둔 단어장 중 가장 최근 것을 보여준다 */
+function openSavedBooks() {
+    const books = loadBooks();
+    if (!books.length) return;
+    showWordbook(books[books.length - 1], false);
+}
+
+/* -----------------------------------------
+   언어
+----------------------------------------- */
+function pickLang(value) {
+    lang = (value === 'en') ? 'en' : 'ko';
+    settings.lang = lang;
+    saveSettings();
+    syncLangUI();
+    // 언어가 바뀌면 이전 언어의 주제와 추천은 뜻이 없다
+    $('topic-input').value = '';
+    $('topic-chips').innerHTML = '';
+    $('topic-status').classList.add('hidden');
+    $('topic-input').focus();
+}
+
+function syncLangUI() {
+    const isEn = (lang === 'en');
+    $('lang-ko').classList.toggle('active', !isEn);
+    $('lang-en').classList.toggle('active', isEn);
+
+    $('topic-input').placeholder = isEn
+        ? 'e.g. market, bathhouse, fridge'
+        : '예) 시장, 목욕탕, 냉장고';
+    $('topic-input').maxLength = isEn ? 24 : 20;
+    $('word-input').placeholder = isEn ? 'type the word' : '단어 입력';
+
+    // 저장해 둔 단어장이 있으면 시작 화면에서 볼 수 있게 한다
+    $('my-books-btn').classList.toggle('hidden', loadBooks().length === 0);
+}
+
+/* -----------------------------------------
    모드
 ----------------------------------------- */
 function pickMode(value) {
@@ -243,7 +375,7 @@ async function askTopics() {
     box.innerHTML = '';
 
     try {
-        const res = await api('/api/topics', {});
+        const res = await api('/api/topics', { lang });
         const list = res.topics || [];
         box.innerHTML = list.length
             ? list.map(function (t) {
@@ -325,7 +457,7 @@ async function checkTopic(value) {
     btn.disabled = true;
 
     try {
-        const res = await api('/api/topic-check', { topic: value });
+        const res = await api('/api/topic-check', { topic: value, lang });
         if (res.ok) {
             box.classList.add('hidden');
             return true;
@@ -486,6 +618,7 @@ async function judgeMyWord(word) {
             topic,
             word,
             usedWords: entries.map(e => e.word),
+            lang,
         });
         if (token !== session) return;
 
@@ -526,6 +659,7 @@ async function runAiTurn() {
         const res = await api('/api/ai-turn', {
             topic,
             usedWords: entries.map(e => e.word),
+            lang,
         });
         if (token !== session) return;
 
@@ -534,21 +668,26 @@ async function runAiTurn() {
             return;
         }
 
-        entries.push({ word: res.word, by: 'ai' });
+        entries.push({ word: res.word, gloss: res.gloss || '', by: 'ai' });
         updateCounts();
-        showReveal(res.word);
+        showReveal(res.word, res.gloss);
     } catch (err) {
         if (token !== session) return;
         showError(err, runAiTurn);
     }
 }
 
-function showReveal(word) {
+function showReveal(word, gloss) {
     phase = 'reveal';
     $('my-turn-area').classList.add('hidden');
     $('waiting-area').classList.add('hidden');
     $('reveal-area').classList.remove('hidden');
     $('reveal-word').innerText = word;
+
+    // 영어 모드에서는 뜻을 알아야 외울 수 있다
+    const glossBox = $('reveal-gloss');
+    glossBox.innerText = gloss || '';
+    glossBox.classList.toggle('hidden', !gloss);
     updateTurnBar();
 
     // 확인 버튼으로 포커스를 옮긴다.
@@ -700,6 +839,9 @@ function gameOver(reason) {
     const canResume = (reason === 'wrong' || reason === 'timeout');
     $('resume-btn').classList.toggle('hidden', !canResume);
 
+    // 숫자 모드는 외울 낱말이 없으니 단어장이 뜻이 없다
+    $('book-btn').classList.toggle('hidden', mode === 'number' || entries.length === 0);
+
     const retryBox = $('retry-note');
     retryBox.innerText = '🔁 이어하기 ' + retryCount + '회 사용';
     retryBox.classList.toggle('hidden', retryCount === 0);
@@ -798,9 +940,10 @@ function renderWordList(reason) {
         const who = mode === 'ai'
             ? '<span class="who">' + (e.by === 'ai' ? '🤖' : '🙋') + '</span>'
             : '';
+        const gloss = e.gloss ? '<span class="gloss">' + escapeHtml(e.gloss) + '</span>' : '';
         return '<div class="word-chip' + missed + byAi + '">'
             + '<span class="no">' + (i + 1) + '</span>' + who
-            + escapeHtml(e.word) + '</div>';
+            + escapeHtml(e.word) + gloss + '</div>';
     }).join('');
 }
 
@@ -992,6 +1135,8 @@ loadSettings();
 
 // 지난번에 고른 모드와 숫자 범위를 그대로 되살린다
 mode = settings.mode;
+lang = settings.lang;
+syncLangUI();
 $('min-input').value = settings.min;
 $('max-input').value = settings.max;
 syncModeUI();
