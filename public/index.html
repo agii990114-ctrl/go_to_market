@@ -953,6 +953,34 @@
             flex-shrink: 0;
         }
 
+        .book-day {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.74rem;
+            font-weight: 800;
+            color: var(--accent-text);
+            padding: 8px 4px 4px;
+            letter-spacing: 0.02em;
+        }
+
+        .book-day span { color: var(--sub); font-weight: 600; }
+
+        .book-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            text-align: left;
+            padding: 9px 10px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        .book-item:active { transform: scale(0.99); }
+
         .book-empty { color: var(--sub); font-size: 0.8rem; text-align: center; padding: 10px; }
 
         .topic-status {
@@ -1382,6 +1410,7 @@
             <div class="book-list" id="book-list"></div>
             <div class="modal-actions">
                 <button class="btn btn-primary" id="book-save" onclick="saveWordbook()">💾 저장</button>
+                <button class="btn hidden" id="book-back" onclick="openSavedBooks()">← 목록으로</button>
                 <button class="btn" onclick="closeWordbook()">닫기</button>
             </div>
         </div>

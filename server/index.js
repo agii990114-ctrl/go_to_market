@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 import { MOCK, llmStatus, modelFor, providerFor, warmUpLocalModels } from './llm.js';
 import { cacheStats } from './verdict-cache.js';
-import { judge, suggestTopics, validateTopic, generateWords } from './agents.js';
+import { judge, suggestTopics, validateTopic, generateWords, glossWords } from './agents.js';
 import { checkTopicShape } from './topic.js';
 import { isRealWord } from './dictionary.js';
 import { isDuplicate, playAiTurn } from './game.js';
@@ -220,6 +220,24 @@ app.post('/api/wordbook', async (req, res, next) => {
                 if (!isRealWord(word, lang)) continue;
                 seen.add(word.toLowerCase());
                 out.push({ word: lang === 'en' ? word.toLowerCase() : word, gloss, fromGame: false });
+            }
+        }
+
+        // 사람이 직접 친 단어에는 뜻이 없다. 단어장에 빈칸이 생기지 않게 채운다.
+        if (lang === 'en') {
+            const missing = out.filter(w => !w.gloss).map(w => w.word);
+            if (missing.length) {
+                try {
+                    const g = await glossWords(missing);
+                    const byWord = new Map(
+                        (g?.items || []).map(i => [String(i.word || '').trim().toLowerCase(), String(i.gloss || '').trim()])
+                    );
+                    for (const w of out) {
+                        if (!w.gloss) w.gloss = byWord.get(w.word.toLowerCase()) || '';
+                    }
+                } catch (e) {
+                    // 뜻을 못 받아도 단어장은 만들어 준다. 빈칸으로 둔다.
+                }
             }
         }
 

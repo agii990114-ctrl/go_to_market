@@ -121,14 +121,30 @@ If it can be there, it passes. The moment you find yourself writing
 const PLACE_RULE_EN = `[What can be a topic]
 A **space that has things inside it**, so that "At the <topic> there is ~" sounds natural.
 
+There is one test. Put "go to the" in front of it and say it aloud.
+  "go to the market"  -> sounds right. Pass.
+  "go to the fruit"   -> does not. Fail.
+  "go to the animal"  -> does not. Fail.
+
+**The given word itself must be a space.**
+Do not think of a place related to the word and pass it. This is the most common mistake.
+  Seeing "fruit", do not think of a fruit shop. A fruit shop is a space; fruit is not.
+  Seeing "animal", do not think of a zoo. A zoo is a space; an animal is not.
+  Seeing "clothes", do not think of a wardrobe.
+Judge the word exactly as given. Never substitute a related place for it.
+
 Good: market, zoo, school, hospital, library, bathhouse, playground, bakery,
       butcher, sea, mountain, kitchen, classroom, fridge, drawer, backpack, subway
-Bad:  summer, winter (a time, not a space)
+      **orchard**, wardrobe, aquarium — a kind-of-thing may appear in the name;
+      what matters is that the thing named is a space. "go to the orchard" sounds right.
+Bad:  fruit, animal, food, clothes, furniture (a kind of thing, not a space)
+      summer, winter (a time, not a space)
       game, love, memory (an idea or a feeling)
       red, round (a quality)
       Beethoven, Newton (a person)
 
-There must be things that can be inside it. Times, feelings and ideas do not count.`;
+There must be things that can be inside it.
+Times, feelings, ideas and kinds-of-thing do not count.`;
 
 /* 영어판 생성 예시 */
 const FEW_SHOT_EN = `[Good and bad answers]
@@ -430,15 +446,30 @@ ${FEW_SHOT_EN}`,
 const PLACE_RULE = `[주제가 될 수 있는 것]
 "<주제>에 가면 ~도 있고" 라고 말했을 때 자연스러운, **안에 무언가가 들어 있는 공간**이다.
 
+판정하는 법은 하나다. 주제 뒤에 "에 가면" 을 붙여 소리 내 보라.
+  "시장에 가면"   → 말이 된다. 통과.
+  "과일에 가면"   → 말이 안 된다. 탈락.
+  "동물에 가면"   → 말이 안 된다. 탈락.
+
+**주제로 주어진 그 낱말 자체가 공간이어야 한다.**
+그 낱말과 관련된 장소를 떠올려 통과시키면 안 된다. 이게 가장 흔한 실수다.
+  "과일" 을 보고 과일 가게를 떠올리면 안 된다. 과일 가게는 공간이지만 과일은 아니다.
+  "동물" 을 보고 동물원을 떠올리면 안 된다. 동물원은 공간이지만 동물은 아니다.
+  "옷" 을 보고 옷장을 떠올리면 안 된다.
+주어진 낱말을 다른 말로 바꿔 읽지 말고, 그 낱말 그대로 판정하라.
+
 통과: 시장, 동물원, 학교, 병원, 도서관, 목욕탕, 놀이터, 편의점, 정육점,
       바다, 산, 부엌, 교실, 냉장고, 서랍, 가방, 할머니 댁, 지하철
-탈락: 여름·겨울 (때이지 공간이 아니다)
+      **과수원**, 꽃밭, 옷장 — 갈래 이름이 앞에 붙어 있어도 뒤가 공간이면 통과다.
+      "과수원에 가면", "옷장에 가면" 은 말이 된다.
+탈락: 과일·동물·음식·옷·가구 (사물의 갈래이지 공간이 아니다)
+      여름·겨울 (때이지 공간이 아니다)
       게임·사랑·추억 (개념이나 감정이지 공간이 아니다)
       빨강·둥근 것 (성질이다)
       김연아·아이유 (사람이다)
       시장과일·냉장고채소 (지어낸 말이다)
 
-담을 수 있는 물건이 안에 있어야 한다. 시간·감정·개념은 안 된다.`;
+담을 수 있는 물건이 안에 있어야 한다. 시간·감정·개념·사물의 갈래는 안 된다.`;
 
 /* -----------------------------------------------------------
    주제 검증 : 사람이 직접 쓴 주제가 장소인지 본다
@@ -491,6 +522,54 @@ ${PLACE_RULE}
         valid: Boolean(v?.isPlace),
         reason: String(v?.reason ?? '').replace(/[*_`~<>]/g, '').trim(),
     }));
+}
+
+/* -----------------------------------------------------------
+   뜻 달기 : 사람이 직접 친 단어에는 뜻이 없다
+----------------------------------------------------------- */
+const GLOSS_SCHEMA = {
+    type: 'object',
+    properties: {
+        items: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    word: { type: 'string', maxLength: 20 },
+                    gloss: { type: 'string', maxLength: 14 },
+                },
+                required: ['word', 'gloss'],
+                additionalProperties: false,
+            },
+        },
+    },
+    required: ['items'],
+    additionalProperties: false,
+};
+
+/**
+ * 영어 낱말들의 한글 뜻을 한 번에 받는다.
+ *
+ * AI 가 낸 단어는 생성할 때 뜻을 함께 받지만, 사람이 직접 친 단어에는 뜻이 없다.
+ * 단어장에 뜻 없는 칸이 생기면 학습용으로 쓸 수가 없다.
+ * 낱말마다 부르면 느리니 한 번에 묶어서 받는다.
+ */
+export function glossWords(words) {
+    if (!words.length) return Promise.resolve({ items: [] });
+
+    return askJson({
+        role: 'generate',
+        maxTokens: 900,
+        system: `You give the Korean meaning of English words.
+
+[Rules]
+- For each word, give its Korean meaning in 2 to 6 Korean characters.
+- Korean only. No romanisation, no English, no brackets, no explanation.
+- Keep the word exactly as given. Do not correct or change it.
+- Give one entry for every word you are given, in the same order.`,
+        user: `Give the Korean meaning of each word.\n\n${words.join('\n')}`,
+        schema: GLOSS_SCHEMA,
+    });
 }
 
 /* -----------------------------------------------------------

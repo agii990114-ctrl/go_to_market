@@ -177,10 +177,13 @@ async function makeWordbook() {
             target: BOOK_TARGET,
             words: entries.map(e => ({ word: e.word, gloss: e.gloss || '' })),
         });
+        const now = new Date();
         pendingBook = {
             topic,
             lang,
-            at: new Date().toISOString().slice(0, 10),
+            at: localDay(now),
+            // 같은 날 여러 권을 만들 수 있으니 시각까지 남겨 정렬에 쓴다
+            ts: now.getTime(),
             words: res.words || [],
         };
         showWordbook(pendingBook, true);
@@ -237,11 +240,59 @@ function closeWordbook() {
     pendingBook = null;
 }
 
-/** 시작 화면 : 저장해 둔 단어장 중 가장 최근 것을 보여준다 */
+/** 현지 시각 기준 날짜 (YYYY-MM-DD) */
+function localDay(d) {
+    return [d.getFullYear(), d.getMonth() + 1, d.getDate()]
+        .map(n => String(n).padStart(2, '0')).join('-');
+}
+
+/**
+ * 저장해 둔 단어장을 날짜별로 묶어 보여준다. 최근 것이 위에 온다.
+ * 날짜를 누르면 그날의 단어장이 펼쳐지고, 한 권을 누르면 단어가 보인다.
+ */
 function openSavedBooks() {
     const books = loadBooks();
     if (!books.length) return;
-    showWordbook(books[books.length - 1], false);
+
+    // 최근 먼저. 옛 기록에는 ts 가 없으니 날짜로 대신한다.
+    const sorted = [...books].sort((a, b) => (b.ts || 0) - (a.ts || 0) || String(b.at).localeCompare(String(a.at)));
+
+    const byDay = new Map();
+    for (const b of sorted) {
+        const day = b.at || '(날짜 없음)';
+        if (!byDay.has(day)) byDay.set(day, []);
+        byDay.get(day).push(b);
+    }
+
+    savedView = sorted;
+
+    $('book-title').innerText = '내 단어장';
+    $('book-note').innerHTML = '모두 <b>' + books.length + '권</b> · 최근 것이 위에 있어요';
+    $('book-list').innerHTML = [...byDay.entries()].map(([day, list]) => {
+        const rows = list.map(b => {
+            const i = sorted.indexOf(b);
+            return '<button class="book-item" onclick="openSavedBook(' + i + ')">'
+                + '<span class="w">' + escapeHtml(b.topic) + '</span>'
+                + '<span class="g">' + b.words.length + '개'
+                + (b.lang === 'en' ? ' · English' : '') + '</span>'
+                + '<span class="tag">▸</span></button>';
+        }).join('');
+        return '<div class="book-day">📅 ' + escapeHtml(day) + '  <span>' + list.length + '권</span></div>' + rows;
+    }).join('');
+
+    $('book-save').classList.add('hidden');
+    $('book-back').classList.add('hidden');
+    $('book-modal').classList.add('open');
+}
+
+let savedView = [];   // 목록에서 고른 순서대로 접근하기 위한 배열
+
+/** 목록에서 한 권을 펼친다 */
+function openSavedBook(index) {
+    const book = savedView[index];
+    if (!book) return;
+    showWordbook(book, false);
+    $('book-back').classList.remove('hidden');
 }
 
 /* -----------------------------------------
