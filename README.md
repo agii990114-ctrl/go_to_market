@@ -20,7 +20,7 @@ winget install --id Ollama.Ollama --exact
 ```
 
 ```bash
-ollama pull gemma3:4b
+ollama pull gemma4:e2b-it-qat
 ```
 
 `ollama serve` 는 설치 시 백그라운드 서비스로 함께 등록됩니다.
@@ -299,7 +299,7 @@ data/            받아 온 단어 목록 (git 에 올리지 않음)
 | 변수 | 기본값 | 설명 |
 |---|---|---|
 | `LLM_PROVIDER` | `ollama` | `ollama` (로컬) 또는 `anthropic` (클라우드) |
-| `OLLAMA_MODEL` | `gemma3:4b` | 로컬 기본 모델. 한국어·영어를 모두 한다 |
+| `OLLAMA_MODEL` | `gemma4:e2b-it-qat` | 로컬 기본 모델. 한국어·영어를 모두 한다 |
 | `OLLAMA_KEEP_ALIVE` | `30m` | 모델을 VRAM 에 붙잡아 두는 시간 |
 | `ANTHROPIC_API_KEY` | — | 클라우드를 쓸 때만 필요 |
 | `REFEREE_ON_AI` | `true` | AI 단어가 검수를 통과한 뒤 심판까지 한 번 더 거칠지 |
@@ -338,6 +338,20 @@ MODEL_GENERATE=claude-opus-5
   가설도 틀렸습니다. `what` 칸을 보면 모델은 옹심이를 "찹쌀가루 반죽" 이라고
   제대로 알고 있었습니다. 지식이 부족한 게 아니라 관대함 규칙이 셌던 것입니다.
   실험은 [`bench/two-step-judge.js`](bench/two-step-judge.js) 에 남겼습니다.
+- **모델은 재보고 골랐습니다.** 같은 벤치로 다섯을 견줬습니다.
+
+  | | 한국어 통과HELD | 한국어 탈락HELD | 영어 | 판정 | 크기 |
+  |---|---|---|---|---|---|
+  | exaone3.5:7.8b | 96% | 100% | 생성 불가 | 2059ms | 4.8GB |
+  | gemma3:1b | 86% | **23%** | — | 561ms | 0.76GB |
+  | gemma3:4b | **96%** | 100% | 13/16 | 1040ms | 3.3GB |
+  | **gemma4:e2b-it-qat** | 93% | 100% | **10/10** | **797ms** | 4.3GB |
+
+  `gemma3:1b` 은 탈락시켜야 할 것을 거의 다 통과시켜(23%) 심판을 맡길 수 없습니다.
+  `gemma4` 는 영어가 완벽하고 더 빠르지만, 한국어 판정 사유에서 대상을 혼동할 때가
+  있습니다 — `겨울`+`눈사람` 을 "여름과 반대되는 계절이라" 며 탈락시킨 적이 있습니다.
+  그 위험을 알고도 영어 정확도와 속도를 택했습니다.
+  되돌리려면 `.env` 의 `OLLAMA_MODEL` 한 줄만 `gemma3:4b` 로 바꾸면 됩니다.
 - **"있을 수도 있다" 는 통과 사유가 아닙니다.** 주제 `market` 에서 `lion`, `elephant`,
   `whale` 이 통과했습니다. 사유가 하나같이 "might be sold at a market" 이었습니다.
   그 말로는 무엇이든 통과시킬 수 있습니다. 그래서 기준을
