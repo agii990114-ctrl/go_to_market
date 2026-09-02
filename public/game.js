@@ -315,11 +315,13 @@ function syncLangUI() {
     $('lang-ko').classList.toggle('active', !isEn);
     $('lang-en').classList.toggle('active', isEn);
 
-    $('topic-input').placeholder = isEn
+    // 혼자 하는 모드에서는 언어를 안 고르므로 안내도 한글로 둔다
+    const showEn = isEn && mode === 'ai';
+    $('topic-input').placeholder = showEn
         ? 'e.g. market, bathhouse, fridge'
         : '예) 시장, 목욕탕, 냉장고';
-    $('topic-input').maxLength = isEn ? 24 : 20;
-    $('word-input').placeholder = isEn ? 'type the word' : '단어 입력';
+    $('topic-input').maxLength = showEn ? 24 : 20;
+    $('word-input').placeholder = showEn ? 'type the word' : '단어 입력';
 
     // 저장해 둔 단어장이 있으면 시작 화면에서 볼 수 있게 한다
     $('my-books-btn').classList.toggle('hidden', loadBooks().length === 0);
@@ -350,6 +352,10 @@ function syncModeUI() {
     $('word-setup').classList.toggle('hidden', isNum);
     $('number-setup').classList.toggle('hidden', !isNum);
 
+    // 언어는 AI 대결에서만 뜻이 있다.
+    // 혼자 하는 모드는 판정도 생성도 없어서 한국어든 영어든 그냥 쳐 넣으면 된다.
+    $('lang-setup').classList.toggle('hidden', !isAi);
+
     // 주제 추천과 주제 검증은 서버가 필요하다. 혼자 하는 모드에서는 감춘다.
     $('topic-tools').classList.toggle('hidden', !isAi);
     if (!isAi) {
@@ -364,6 +370,7 @@ function syncModeUI() {
             ? 'AI 와 <b>번갈아</b> 단어를 쌓습니다.<br>앞의 단어를 <b>순서대로 다시 입력</b>한 뒤 새 단어를 하나 추가하세요.<br>단어가 주제에 맞는지는 <b>심판 AI</b> 가 판정합니다.'
             : '주제를 정하고 단어를 하나씩 이어 붙여 보세요.<br>앞에서 넣은 단어를 <b>순서대로 다시 입력</b>한 뒤<br>새 단어를 하나 추가하면 됩니다.';
 
+    syncLangUI();
     renderHomeStats();
 }
 

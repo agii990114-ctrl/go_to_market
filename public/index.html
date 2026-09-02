@@ -1257,17 +1257,20 @@
             </div>
             <div class="trend-note hidden" id="home-trend"></div>
 
-            <div class="field-label">언어</div>
-            <div class="seg seg-wide">
-                <button class="seg-btn" id="lang-ko" onclick="pickLang('ko')">🇰🇷 한국어</button>
-                <button class="seg-btn" id="lang-en" onclick="pickLang('en')">🇺🇸 English</button>
-            </div>
-
             <div class="field-label">모드</div>
             <div class="seg seg-wide">
                 <button class="seg-btn" id="mode-ai" onclick="pickMode('ai')">🤖 AI 대결</button>
                 <button class="seg-btn" id="mode-solo" onclick="pickMode('solo')">📝 혼자·단어</button>
                 <button class="seg-btn" id="mode-number" onclick="pickMode('number')">🔢 혼자·숫자</button>
+            </div>
+
+            <!-- 언어는 AI 대결에서만 뜻이 있다. 혼자 하는 모드는 판정도 생성도 없다. -->
+            <div class="setup-block" id="lang-setup">
+                <div class="field-label">언어</div>
+                <div class="seg seg-wide">
+                    <button class="seg-btn" id="lang-ko" onclick="pickLang('ko')">🇰🇷 한국어</button>
+                    <button class="seg-btn" id="lang-en" onclick="pickLang('en')">🇺🇸 English</button>
+                </div>
             </div>
 
             <div class="setup-block" id="word-setup">
