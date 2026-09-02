@@ -33,14 +33,19 @@ const RUBRIC = `[판정 기준]
 6. **주제 안에 실제로 있을 수 있는 것은 무조건 통과다.**
    반갑지 않은 것이라도 통과다 — 잡초, 벌레, 쓰레기, 먼지, 곰팡이, 소음.
    "있기는 하지만 좋지 않다" 는 탈락 사유가 되지 못한다.
-7. 탈락시키는 경우는 딱 둘뿐이다.
+7. 판정은 "그 장소에서 **흔히** 볼 수 있는가" 로 한다.
+   "있을 수도 있다", "팔릴 수도 있다" 는 근거가 되지 못한다.
+   그 말로는 무엇이든 통과시킬 수 있기 때문이다.
+   반갑지 않은 것이라도 흔히 있으면 통과다(쥐, 잡초, 먼지).
+   흔치 않으면, 아무리 "가능은 하다" 해도 탈락이다.
+8. 탈락시키는 경우는 딱 둘뿐이다.
    (가) 이어지는 지점이 아예 없다.  예: 냉장고 / 화산, 시장 / 미적분
    (나) 계절이나 환경이 반대여서 그 자리에 놓이지 않는다.
         예: 여름 / 눈사람·패딩 (겨울 것이다), 냉장고 / 화로 (데우는 것이다)
    이 둘이 아니면 통과다.
-8. 자판을 아무렇게나 친 것으로 보이면 탈락이다.
-9. 오직 "주제 적합성"만 본다. 이미 나온 단어인지(중복)는 절대 보지 않는다. 중복은 게임 코드가 따로 처리한다.
-10. 맞춤법이 조금 틀려도 무슨 말인지 알아볼 수 있으면 통과다.
+9. 자판을 아무렇게나 친 것으로 보이면 탈락이다.
+10. 오직 "주제 적합성"만 본다. 이미 나온 단어인지(중복)는 절대 보지 않는다. 중복은 게임 코드가 따로 처리한다.
+11. 맞춤법이 조금 틀려도 무슨 말인지 알아볼 수 있으면 통과다.
 
 [판정 예시]
 주제 "냉장고" / "고기"    → 통과. 냉장고에 고기를 넣어 두는 건 흔한 일이다.
@@ -58,6 +63,10 @@ const RUBRIC = `[판정 기준]
 주제 "과일밭" / "잡초"    → 통과. 반갑지 않아도 밭에 실제로 난다.
 주제 "과일밭" / "풀"      → 통과. 밭에 나는 것이다.
 주제 "과일밭" / "모래"    → 통과. 밭 흙에 섞여 있을 수 있다.
+주제 "시장"   / "고양이"  → 통과. 시장 길고양이는 흔한 풍경이다.
+주제 "시장"   / "쥐"      → 통과. 반갑지 않아도 흔히 있다.
+주제 "시장"   / "사자"    → 탈락. "팔릴 수도 있다" 는 말뿐이고 실제로는 없다.
+주제 "시장"   / "고래"    → 탈락. 흔히 볼 수 있는 것이 아니다.
 
 "보관한다", "거기서 쓴다", "거기서 판다", "거기 난다" 만으로도 충분한 이유다.
 "직접적인 관련성이 부족하다" 는 판정은 위의 "화산", "미적분" 같은 경우에만 쓴다.
@@ -78,22 +87,32 @@ const RUBRIC = `[판정 기준]
  * "있기는 한데 관련성이 부족하다" 같은 자기모순 사유 금지.
  */
 const RUBRIC_EN = `[How to judge]
-1. Pass by default. Fail only when there is no connection at all.
+
+THE ONE TEST: is this **commonly** at that place?
+Not "could it be", not "might it be sold there" — is it commonly there?
+"It might be there" would let absolutely anything pass, so it never counts.
+Say the sentence out loud: "At the <topic> there is <word>."
+If that describes an ordinary day at that place, it passes. If it describes
+something you would be astonished to see, it fails.
+
+1. Judge by that test. Be generous inside it — most everyday things pass.
 2. If a Korean speaker would nod at "At the <topic> there is <word>", it passes.
 3. Anything inside the place, stored there, sold there, done there,
    heard or smelled there, or any person who is there — all pass.
 4. Figurative or cultural associations pass if they are not far-fetched.
 5. **Anything that can actually be there passes, even if unwelcome** —
    weeds, dust, noise, mould, rubbish. "It is there but undesirable" is not a reason to fail.
-6. There are only two reasons to fail.
+6. Unwelcome things pass if they are commonly there — rats, weeds, dust, mould.
+   Uncommon things fail, however possible they are.
+7. There are only two reasons to fail.
    (a) There is no connection at all.   e.g. fridge / volcano, market / calculus
    (b) The season or environment is the opposite, so it would not be there.
        e.g. summer / snowman (that is winter), fridge / furnace (that heats)
    Anything else passes.
-7. Fail if it looks like random keyboard mashing.
-8. Judge topic fit only. Never consider whether the word was already used —
+8. Fail if it looks like random keyboard mashing.
+9. Judge topic fit only. Never consider whether the word was already used —
    the game code handles duplicates separately.
-9. Minor spelling slips pass if the word is recognisable.
+10. Minor spelling slips pass if the word is recognisable.
 
 [Examples]
 topic "fridge"    / "meat"     -> pass. People keep meat in a fridge.
@@ -106,16 +125,27 @@ topic "orchard"   / "weeds"    -> pass. Unwelcome, but they really grow there.
 topic "bathhouse" / "steam"    -> pass. Steam fills a bathhouse.
 topic "summer"    / "snowman"  -> fail. That belongs to winter, the opposite season.
 topic "library"   / "asdfgh"   -> fail. That is keyboard mashing.
+topic "market"    / "cat"      -> pass. Stray cats are a common market sight.
+topic "market"    / "rat"      -> pass. Unwelcome, but commonly there.
+topic "market"    / "lion"     -> fail. "Might be sold" is talk; lions are not there.
+topic "market"    / "whale"    -> fail. Not something you commonly see at a market.
 
 "It is stored there", "it is used there", "it is sold there", "it grows there"
 are each reason enough on their own.
 "Not directly related" belongs only to cases like "volcano" and "calculus".
 "It gets in the way", "it is undesirable", "it does not belong" are NOT reasons to fail.
+But "it could be there", "it might be sold there" are NOT reasons to pass either.
+Ask whether it is commonly there, not whether it is possible.
 Above all, "it can be there but is not directly related" is a contradiction.
 If it can be there, it passes. The moment you find yourself writing
 "it could be there, but", the answer is pass.
 
-[Output] reason must be one short English sentence, under 12 words.`;
+[Output]
+- reason must be one short English sentence, under 12 words.
+- **Never write "might", "could", "sometimes", "occasionally", "possibly" in reason.**
+  If those are the only words that fit, the answer is fail, not pass.
+  A passing reason states a plain fact: "Fish are sold at markets."
+  Not "Fish might be sold at markets."`;
 
 /* 영어판 장소 기준 */
 const PLACE_RULE_EN = `[What can be a topic]
@@ -187,13 +217,20 @@ const WORD_LIST_SCHEMA_EN = {
     additionalProperties: false,
 };
 
+/*
+ * valid 를 먼저 쓰게 둔다.
+ *
+ * reason 을 앞에 두면 이유를 먼저 쓰고 판정하니 더 나을 것 같았는데, 재보니
+ * 반대였다(13/16 → 12/16). 모델이 통과를 정당화하는 이유를 먼저 지어 놓고
+ * 거기에 판정을 맞춘다. valid 가 앞에 있으면 그럴 여지가 줄어든다.
+ */
 const VERDICT_SCHEMA = {
     type: 'object',
     properties: {
         valid: { type: 'boolean', description: '주제에 맞으면 true' },
         // 작은 모델은 이 칸에서 같은 문장을 무한 반복하다 토큰을 다 써 버린다.
         // 스키마와 프롬프트 양쪽에서 길이를 묶어 둔다.
-        reason: { type: 'string', maxLength: 60, description: '40자 이내의 한국어 한 문장' },
+        reason: { type: 'string', maxLength: 60, description: '40자 이내의 한 문장' },
     },
     required: ['valid', 'reason'],
     additionalProperties: false,
