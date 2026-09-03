@@ -14,6 +14,7 @@ import { cacheStats } from './verdict-cache.js';
 import { judge, suggestTopics, validateTopic, generateWords, glossWords } from './agents.js';
 import { checkTopicShape } from './topic.js';
 import { isRealWord } from './dictionary.js';
+import { cleanGloss } from './game.js';
 import { isDuplicate, playAiTurn } from './game.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -199,7 +200,7 @@ app.post('/api/wordbook', async (req, res, next) => {
         const played = (Array.isArray(req.body?.words) ? req.body.words : [])
             .map(w => ({
                 word: String(w?.word ?? '').trim(),
-                gloss: String(w?.gloss ?? '').trim(),
+                gloss: cleanGloss(w?.gloss),
                 fromGame: true,
             }))
             .filter(w => w.word);
@@ -215,7 +216,7 @@ app.post('/api/wordbook', async (req, res, next) => {
             for (const raw of result?.words || []) {
                 if (out.length >= target) break;
                 const word = String(typeof raw === 'string' ? raw : raw?.word ?? '').trim();
-                const gloss = String(typeof raw === 'string' ? '' : raw?.gloss ?? '').trim();
+                const gloss = cleanGloss(typeof raw === 'string' ? '' : raw?.gloss);
                 if (!word || seen.has(word.toLowerCase())) continue;
                 if (!isRealWord(word, lang)) continue;
                 seen.add(word.toLowerCase());
@@ -230,7 +231,7 @@ app.post('/api/wordbook', async (req, res, next) => {
                 try {
                     const g = await glossWords(missing);
                     const byWord = new Map(
-                        (g?.items || []).map(i => [String(i.word || '').trim().toLowerCase(), String(i.gloss || '').trim()])
+                        (g?.items || []).map(i => [String(i.word || '').trim().toLowerCase(), cleanGloss(i.gloss)])
                     );
                     for (const w of out) {
                         if (!w.gloss) w.gloss = byWord.get(w.word.toLowerCase()) || '';

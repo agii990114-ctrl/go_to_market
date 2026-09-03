@@ -206,7 +206,7 @@ const WORD_LIST_SCHEMA_EN = {
                 type: 'object',
                 properties: {
                     word: { type: 'string', maxLength: 16, description: 'lowercase English word' },
-                    gloss: { type: 'string', maxLength: 14, description: 'Korean meaning, 2-6 characters' },
+                    gloss: { type: 'string', maxLength: 8, description: 'Korean meaning only, 2-6 Hangul characters, nothing else' },
                 },
                 required: ['word', 'gloss'],
                 additionalProperties: false,
@@ -415,8 +415,17 @@ const FEW_SHOT = `[좋은 답과 나쁜 답의 예]
 /* -----------------------------------------------------------
    플레이어 AI : 새 단어를 한 번에 여러 개 생성
 ----------------------------------------------------------- */
-export function generateWords(topic, usedWords, count = 20, lang = 'ko') {
-    if (lang === 'en') return generateWordsEn(topic, usedWords, count);
+/**
+ * @param framing 'list' — "어울리는 낱말을 나열하라"
+ *                'fill' — "<주제>에 가면 OO 이 있다" 의 빈칸을 채우라
+ *
+ * 두 틀은 잘하는 게 다르다. bench/gen-framing.js 측정 (5개 주제, 75개 생성):
+ *   list : 코드통과 55 / 채택 51   시장에서 "흥정", "떡볶이" 처럼 풍성한 말이 나온다
+ *   fill : 코드통과 66 / 채택 51   냉장고에서 "우유", "계란" 처럼 안에 든 것이 나온다
+ * 최종 채택률은 68% 로 같지만 성격이 상보적이라, game.js 에서 둘을 반씩 받아 섞는다.
+ */
+export function generateWords(topic, usedWords, count = 20, lang = 'ko', framing = 'list') {
+    if (lang === 'en') return generateWordsEn(topic, usedWords, count, framing);
 
     const usedBlock = usedWords.length ? usedWords.join(', ') : '(아직 없음)';
 
@@ -424,7 +433,13 @@ export function generateWords(topic, usedWords, count = 20, lang = 'ko') {
         role: 'generate',
         maxTokens: 900,
         system: `당신은 한국의 말놀이 '시장에 가면' 게임의 플레이어다.
-주제에 어울리는 낱말을 여러 개 나열한다.
+${framing === 'fill'
+    ? `"${topic}에 가면 OO 이(가) 있다" 라는 문장의 OO 을 채운다.
+`
+      + `그 문장을 소리 내어 읽었을 때 고개를 끄덕일 낱말만 고른다.
+`
+      + `"${topic}에 가면 OO 이(가) 있다" 가 어색하면 그 낱말은 답이 아니다.`
+    : '주제에 어울리는 낱말을 여러 개 나열한다.'}
 
 [규칙]
 - 이미 나온 단어 목록에 있는 단어는 절대 쓰지 않는다.
@@ -450,14 +465,21 @@ ${FEW_SHOT}`,
  * (심판 호출에도 얹어 봤지만 거기선 불안정했다 — calculus 의 뜻을 "시장" 이라고 답했다.
  *  판정에 집중하느라 단어 대신 주제를 번역해 버린다.)
  */
-function generateWordsEn(topic, usedWords, count) {
+function generateWordsEn(topic, usedWords, count, framing = 'list') {
     const usedBlock = usedWords.length ? usedWords.join(', ') : '(none yet)';
 
     return askJson({
         role: 'generate',
         maxTokens: 1400,
         system: `You are a player of the Korean word game "When I go to the market".
-List English words that fit the place, each with a short Korean meaning.
+${framing === 'fill'
+    ? `Fill in the blank: "At the ${topic} there is ___."
+`
+      + `Only choose words that make that sentence sound natural to say out loud.
+`
+      + `If "At the ${topic} there is ___" sounds odd, it is not an answer.`
+    : 'List English words that fit the place.'}
+Give each word a short Korean meaning.
 
 [Rules]
 - Never use a word from the already-used list. Avoid close synonyms of them too.
@@ -465,7 +487,9 @@ List English words that fit the place, each with a short Korean meaning.
 - Pick everyday English nouns a learner can memorise. One word, lowercase.
 - **Only words an English dictionary would list. Never glue two words together.**
 - No formatting, no quotes, no punctuation. Just the word.
-- gloss: the Korean meaning, 2 to 6 Korean characters. No romanisation, no English.
+- gloss: the Korean meaning. Hangul only, 2 to 6 characters, nothing else.
+  Never repeat it. Never include the English word. Never add a second phrase.
+  "steam" -> "증기". Not "증기 증기", not "증기 steam", not "증기 액체 수액".
 - Spread out — objects, people, actions, sounds, smells, tools.
 - Mix obvious ones with less obvious ones.
 
@@ -573,7 +597,7 @@ const GLOSS_SCHEMA = {
                 type: 'object',
                 properties: {
                     word: { type: 'string', maxLength: 20 },
-                    gloss: { type: 'string', maxLength: 14 },
+                    gloss: { type: 'string', maxLength: 8 },
                 },
                 required: ['word', 'gloss'],
                 additionalProperties: false,

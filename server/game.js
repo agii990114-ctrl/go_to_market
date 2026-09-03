@@ -36,18 +36,31 @@ async function refillPool(topic, usedWords, log, lang) {
     const pool = poolFor(topic, lang);
     const before = pool.length;
 
-    let result;
-    try {
-        result = await generateWords(topic, usedWords, BATCH_SIZE, lang);
-    } catch (e) {
-        log.push({ stage: '생성', word: null, passed: false, reason: e.message });
-        return 0;
+    // 두 가지 틀로 반씩 받는다. 잘하는 게 다르다.
+    //   list : "어울리는 낱말을 나열하라"        — 시장에서 "흥정", "떡볶이" 가 나온다
+    //   fill : "<주제>에 가면 OO 이 있다" 채우기 — 냉장고에서 "우유", "계란" 이 나온다
+    // 최종 채택률은 둘이 같지만(68%) 성격이 상보적이라 합치면 폭이 넓어진다.
+    const half = Math.ceil(BATCH_SIZE / 2);
+    const batches = await Promise.all(['list', 'fill'].map(framing =>
+        generateWords(topic, usedWords, half, lang, framing).catch(e => {
+            log.push({ stage: '생성', word: null, passed: false, reason: framing + ': ' + e.message });
+            return null;
+        })
+    ));
+
+    if (batches.every(b => !b)) return 0;
+
+    // 번갈아 섞는다. 한쪽을 먼저 다 쓰면 섞은 뜻이 없다.
+    const lists = batches.map(b => b?.words || []);
+    const merged = [];
+    for (let i = 0; i < Math.max(...lists.map(l => l.length)); i++) {
+        for (const l of lists) if (l[i] !== undefined) merged.push(l[i]);
     }
 
-    for (const raw of result?.words || []) {
+    for (const raw of merged) {
         // 영어 생성은 { word, gloss } 로 온다. 한국어는 문자열이다.
         const word = cleanWord(typeof raw === 'string' ? raw : raw?.word);
-        const gloss = typeof raw === 'string' ? '' : cleanWord(raw?.gloss);
+        const gloss = typeof raw === 'string' ? '' : cleanGloss(raw?.gloss);
 
         // 아이디어가 떨어지면 모델이 "%FISH%", ">>KNIF<<", ".RECORD" 같은
         // 아스키 쓰레기를 섞어 보낸다. 어차피 사전에서 걸리지만, 풀에 들이지 않는다.
@@ -87,6 +100,22 @@ export function cleanWord(raw) {
         .replace(/[.,!?;:]+$/g, '')             // 끝에 붙은 문장부호
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+/**
+ * 한글 뜻을 다듬는다.
+ *
+ * 프롬프트로 "한글만, 2~6자" 라고 해도 모델이 늘어뜨린다.
+ * 실제로 "증기 증기", "물 액체 수액", "주스 juice 주스를 마" 가 나왔다.
+ * 길이를 스키마로 묶어 두고, 그래도 새는 것은 여기서 자른다.
+ */
+export function cleanGloss(raw) {
+    const first = String(raw ?? '')
+        .replace(/[a-zA-Z]/g, ' ')      // 영어가 섞여 오는 일이 잦다
+        .replace(/[^가-힣 ]/g, ' ')
+        .trim()
+        .split(/\s+/)[0] || '';        // 여러 마디로 늘어뜨리면 첫 마디만 쓴다
+    return first.slice(0, 6);
 }
 
 /** 게임에 쓸 수 있는 모양인지 (한 낱말인지) */
