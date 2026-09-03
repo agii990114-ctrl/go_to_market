@@ -8,7 +8,7 @@ let entries = [];
 let cursor = 0;
 let topic = '';
 let phase = 'idle';
-let session = 0;          // 새 게임을 누르면 올라간다. 늦게 도착한 응답을 버리는 데 쓴다.
+let session = 0;          // 처음으로 를 누르면 올라간다. 늦게 도착한 응답을 버리는 데 쓴다.
 let lastMiss = null;      // 암송을 틀렸을 때 { index, typed, answer }
 let lastVerdict = null;   // 심판이 탈락시켰을 때 { word, reason }
 let pendingRetry = null;  // 통신이 실패했을 때 다시 시도할 동작
@@ -543,10 +543,10 @@ function shakeTopic() {
     input.focus();
 }
 
-// 새 게임 : 주제부터 다시 정할 수 있도록 시작 화면으로 되돌린다
+// 처음으로 : 주제부터 다시 정할 수 있도록 시작 화면으로 되돌린다
 function restartGame() {
     if (phase !== 'idle' && phase !== 'over' && entries.length > 0) {
-        if (!confirm('진행 중인 게임을 끝내고 새로 시작할까요?')) return;
+        if (!confirm('진행 중인 게임을 끝내고 처음 화면으로 돌아갈까요?')) return;
     }
     stopInputTimer();
     session++;              // 아직 날아오고 있는 응답은 이제 무시된다
