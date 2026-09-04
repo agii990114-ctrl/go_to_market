@@ -266,18 +266,26 @@ function renderPlaying() {
     const reveal = room.lastAdded;
     $('room-reveal').classList.toggle('hidden', !revealing || !reveal);
     if (revealing && reveal) {
-        $('room-reveal-cap').innerText = reveal.name + ' 님이 추가한 단어';
+        const progress = ' (' + room.revealAckCount + '/' + room.aliveCount + ')';
+
+        $('room-reveal-cap').innerText = reveal.byMe
+            ? '내가 낸 단어'
+            : reveal.name + ' 님이 추가한 단어';
         $('room-reveal-word').innerText = reveal.word;
-        $('room-reveal-note').innerText = room.revealAcked
-            ? '다른 사람을 기다리는 중…'
-            : '이 단어도 외워야 해요. 다 외웠으면 확인을 누르세요.';
+
+        // 낸 사람은 확인할 것이 없다. 방금 자기가 친 말이다.
+        // 대신 남들이 다 봤는지만 알려준다.
+        $('room-reveal-note').innerText = reveal.byMe
+            ? '다른 사람들이 외우는 중이에요' + progress
+            : room.revealAcked
+                ? '다른 사람을 기다리는 중…' + progress
+                : '이 단어도 외워야 해요. 다 외웠으면 확인을 누르세요.';
 
         const ok = $('reveal-ok');
+        ok.classList.toggle('hidden', reveal.byMe);
         ok.disabled = room.revealAcked;
-        ok.innerText = room.revealAcked
-            ? '✅ 확인함 (' + room.revealAckCount + '/' + room.aliveCount + ')'
-            : '✅ 확인했어요';
-        if (!room.revealAcked && document.activeElement !== ok) ok.focus();
+        ok.innerText = room.revealAcked ? '✅ 확인함' + progress : '✅ 확인했어요';
+        if (!reveal.byMe && !room.revealAcked && document.activeElement !== ok) ok.focus();
     }
 
     // 내 차례가 아니거나 공개 중이면 입력칸을 감춘다
@@ -416,6 +424,7 @@ $('room-input').addEventListener('keydown', function (e) {
 document.addEventListener('keydown', function (e) {
     if (e.key !== 'Enter') return;
     if (!room || room.status !== 'reveal' || room.revealAcked) return;
+    if (room.lastAdded && room.lastAdded.byMe) return;   // 낸 사람은 확인할 것이 없다
     if (e.isComposing || e.keyCode === 229) return;
     e.preventDefault();
     ackReveal();

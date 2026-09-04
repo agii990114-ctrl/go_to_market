@@ -225,7 +225,7 @@ export async function submit(code, playerId, word, { useJudge = true } = {}) {
     room.lastAdded = { word: value, by: player.id, name: player.name };
     if (finishIfOver(room)) return room;
     advanceTurnIndex(room);
-    beginReveal(room);
+    beginReveal(room, player.id);
     touch(room);
     broadcast(room);
     return room;
@@ -235,12 +235,14 @@ export async function submit(code, playerId, word, { useJudge = true } = {}) {
  * 새 낱말을 모두에게 보여주는 단계.
  * 이 동안에는 차례 시간이 흐르지 않는다.
  */
-function beginReveal(room) {
+function beginReveal(room, authorId) {
     clearTimer(room);
     clearRevealTimer(room);
 
     room.status = 'reveal';
-    room.revealAck = new Set();
+    // 낱말을 낸 사람은 확인할 것이 없다. 방금 자기가 친 말이다.
+    // 미리 확인 처리해 두면 나머지 사람이 다 누르는 순간 바로 넘어간다.
+    room.revealAck = new Set(authorId ? [authorId] : []);
 
     const span = room.seconds ? room.seconds * 1000 : REVEAL_CAP_MS;
     room.revealDeadline = Date.now() + span;
@@ -438,7 +440,13 @@ export function viewOf(room, forPlayerId) {
         wordCount: room.entries.length,
         cursor: room.cursor,
         deadline: room.deadline || 0,
-        lastAdded: revealing ? { word: room.lastAdded.word, name: room.lastAdded.name } : null,
+        lastAdded: revealing
+            ? {
+                word: room.lastAdded.word,
+                name: room.lastAdded.name,
+                byMe: room.lastAdded.by === forPlayerId,
+            }
+            : null,
         revealDeadline: revealing ? room.revealDeadline : 0,
         revealAcked: revealing ? room.revealAck.has(forPlayerId) : false,
         revealAckCount: revealing ? room.revealAck.size : 0,
