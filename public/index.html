@@ -983,6 +983,74 @@
 
         .book-empty { color: var(--sub); font-size: 0.8rem; text-align: center; padding: 10px; }
 
+        /* 친구와 하기 */
+        .room-code {
+            width: 100%;
+            background: var(--accent-soft);
+            border: 1px dashed var(--accent-line);
+            border-radius: 16px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .room-code .cap { font-size: 0.72rem; font-weight: 700; color: var(--sub); letter-spacing: 1px; }
+
+        .room-code .val {
+            font-size: 2.4rem;
+            font-weight: 900;
+            color: var(--accent-text);
+            letter-spacing: 6px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .player-list {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .player-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .player-row.is-you { border-color: var(--accent-line); background: var(--accent-soft); }
+        .player-row.is-turn { border-color: var(--accent); box-shadow: var(--shadow-accent); }
+        .player-row.is-out { opacity: 0.45; text-decoration: line-through; }
+        .player-row .tag { margin-left: auto; font-size: 0.68rem; font-weight: 700; color: var(--accent-text); }
+
+        .room-note {
+            font-size: 0.82rem;
+            color: var(--sub);
+            text-align: center;
+            line-height: 1.6;
+            word-break: keep-all;
+        }
+
+        .room-note b { color: var(--accent-text); }
+
+        .room-error {
+            width: 100%;
+            background: var(--missed-bg);
+            border: 1px solid var(--missed-border);
+            color: var(--missed-text);
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        .btn-row { width: 100%; display: flex; gap: 8px; }
+        .btn-row .btn { flex: 1; }
+
         .topic-status {
             font-size: 0.78rem;
             line-height: 1.5;
@@ -1262,6 +1330,7 @@
                 <button class="seg-btn" id="mode-ai" onclick="pickMode('ai')">🤖 AI 대결</button>
                 <button class="seg-btn" id="mode-solo" onclick="pickMode('solo')">📝 혼자·단어</button>
                 <button class="seg-btn" id="mode-number" onclick="pickMode('number')">🔢 혼자·숫자</button>
+                <button class="seg-btn" id="mode-friend" onclick="pickMode('friend')">👥 친구와</button>
             </div>
 
             <!-- 언어는 AI 대결에서만 뜻이 있다. 혼자 하는 모드는 판정도 생성도 없다. -->
@@ -1285,6 +1354,36 @@
                 </div>
 
                 <div class="topic-chips" id="topic-chips"></div>
+            </div>
+
+            <div class="setup-block hidden" id="friend-setup">
+                <div class="field-label">내 이름</div>
+                <input class="text-input" id="player-name" type="text" maxlength="12" placeholder="예) 슬기"
+                    autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+
+                <div class="field-label">한 사람당 제한 시간</div>
+                <div class="seg seg-wide">
+                    <button class="seg-btn" id="sec-0" onclick="pickRoomSeconds(0)">끔</button>
+                    <button class="seg-btn" id="sec-10" onclick="pickRoomSeconds(10)">10초</button>
+                    <button class="seg-btn" id="sec-20" onclick="pickRoomSeconds(20)">20초</button>
+                    <button class="seg-btn" id="sec-30" onclick="pickRoomSeconds(30)">30초</button>
+                </div>
+
+                <div class="room-error hidden" id="room-error"></div>
+
+                <div class="btn-row">
+                    <button class="btn" onclick="quickJoinRoom()">⚡ 빠른 참가</button>
+                    <button class="btn" onclick="showJoinBox()">🔢 코드로 참가</button>
+                </div>
+
+                <div class="setup-block hidden" id="join-box">
+                    <div class="field-label">방 코드</div>
+                    <div class="btn-row">
+                        <input class="text-input" id="join-code" type="text" maxlength="6" inputmode="numeric"
+                            placeholder="6자리" autocomplete="off">
+                        <button class="btn" onclick="joinRoomByCode()">참가</button>
+                    </div>
+                </div>
             </div>
 
             <div class="setup-block hidden" id="number-setup">
@@ -1366,6 +1465,68 @@
         <button class="btn" onclick="restartGame()">🏠 처음으로</button>
     </main>
 
+    <!-- 친구와 하기 : 대기실 -->
+    <main class="screen hidden" id="room-screen">
+        <div class="room-code">
+            <div class="cap">방 코드</div>
+            <div class="val" id="room-code-val">------</div>
+        </div>
+        <div class="room-note" id="room-wait-note"></div>
+        <div class="player-list" id="room-players"></div>
+        <button class="btn btn-primary hidden" id="room-start-btn" onclick="startRoomGame()">▶ 시작</button>
+        <button class="btn" onclick="leaveRoom()">🏠 나가기</button>
+    </main>
+
+    <!-- 친구와 하기 : 진행 -->
+    <main class="screen hidden" id="room-play">
+        <div class="topic-banner">
+            <span id="room-topic">시장</span><span class="topic-suffix" id="room-suffix">에 가면~</span>
+        </div>
+
+        <div class="player-list" id="room-play-players"></div>
+
+        <div class="counter-box">
+            <div class="counter-main">
+                <span id="room-index">1</span>
+                <span class="counter-unit">번째 단어</span>
+            </div>
+            <div class="phase-hint" id="room-hint">차례를 기다리는 중…</div>
+        </div>
+
+        <div id="room-timer-wrap" class="hidden">
+            <div class="timer-track"><div id="room-timer-fill"></div></div>
+            <div id="room-timer-text">0.0</div>
+        </div>
+
+        <div class="reveal-card hidden" id="room-reveal">
+            <div class="reveal-cap" id="room-reveal-cap">새 단어</div>
+            <div class="reveal-word" id="room-reveal-word"></div>
+            <div class="reveal-note">이 단어도 외워야 해요.</div>
+        </div>
+
+        <div class="input-row" id="room-input-row">
+            <input class="text-input" id="room-input" type="text" maxlength="30" placeholder="단어 입력"
+                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            <button class="btn-enter" id="room-send" onclick="submitRoomWord()">▶</button>
+        </div>
+
+        <div class="feedback" id="room-feedback"></div>
+        <button class="btn" onclick="leaveRoom()">🏠 나가기</button>
+    </main>
+
+    <!-- 친구와 하기 : 결과 -->
+    <div class="modal-back" id="room-result">
+        <div class="modal">
+            <div class="modal-emoji" id="room-result-emoji">🏆</div>
+            <div class="modal-title" id="room-result-title">게임 끝</div>
+            <div class="modal-reason" id="room-result-note"></div>
+            <div class="word-list" id="room-result-words"></div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="leaveRoom()">🏠 처음으로</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 3. 결과 모달 -->
     <div class="modal-back" id="result-modal">
         <div class="modal">
@@ -1421,6 +1582,7 @@
 
     <script src="stats.js"></script>
     <script src="game.js"></script>
+    <script src="friend.js"></script>
 </body>
 
 </html>

@@ -316,7 +316,7 @@ function syncLangUI() {
     $('lang-en').classList.toggle('active', isEn);
 
     // 혼자 하는 모드에서는 언어를 안 고르므로 안내도 한글로 둔다
-    const showEn = isEn && mode === 'ai';
+    const showEn = isEn && (mode === 'ai' || mode === 'friend');
     $('topic-input').placeholder = showEn
         ? 'e.g. market, bathhouse, fridge'
         : '예) 시장, 목욕탕, 냉장고';
@@ -331,7 +331,7 @@ function syncLangUI() {
    모드
 ----------------------------------------- */
 function pickMode(value) {
-    mode = ['ai', 'solo', 'number'].includes(value) ? value : 'ai';
+    mode = ['ai', 'solo', 'number', 'friend'].includes(value) ? value : 'ai';
     settings.mode = mode;
     saveSettings();
     syncModeUI();
@@ -345,30 +345,37 @@ function pickMode(value) {
 function syncModeUI() {
     const isNum = (mode === 'number');
     const isAi = (mode === 'ai');
+    const isFriend = (mode === 'friend');
 
-    for (const m of ['ai', 'solo', 'number']) {
+    for (const m of ['ai', 'solo', 'number', 'friend']) {
         $('mode-' + m).classList.toggle('active', mode === m);
     }
+    // 친구 모드도 주제가 필요하다. 숫자 모드만 주제가 없다.
     $('word-setup').classList.toggle('hidden', isNum);
     $('number-setup').classList.toggle('hidden', !isNum);
+    $('friend-setup').classList.toggle('hidden', !isFriend);
 
-    // 언어는 AI 대결에서만 뜻이 있다.
+    // 언어와 주제 추천은 심판이 도는 모드에서만 뜻이 있다.
     // 혼자 하는 모드는 판정도 생성도 없어서 한국어든 영어든 그냥 쳐 넣으면 된다.
-    $('lang-setup').classList.toggle('hidden', !isAi);
-
-    // 주제 추천과 주제 검증은 서버가 필요하다. 혼자 하는 모드에서는 감춘다.
-    $('topic-tools').classList.toggle('hidden', !isAi);
-    if (!isAi) {
+    const usesAi = isAi || isFriend;
+    $('lang-setup').classList.toggle('hidden', !usesAi);
+    $('topic-tools').classList.toggle('hidden', !usesAi);
+    if (!usesAi) {
         $('topic-chips').innerHTML = '';
         $('topic-status').classList.add('hidden');
     }
 
-    $('start-emoji').innerText = isNum ? '🔢' : (isAi ? '🤖' : '📝');
-    $('start-desc').innerHTML = isNum
+    $('start-emoji').innerText = isNum ? '🔢' : isFriend ? '👥' : (isAi ? '🤖' : '📝');
+    $('start-desc').innerHTML = isFriend
+        ? '방을 만들면 <b>코드</b>가 나와요. 친구가 그 코드로 들어옵니다.<br>차례가 돌아가며 단어를 쌓고, <b>틀린 사람만 탈락</b>해요.<br>마지막 한 명이 이깁니다. (최대 10명)'
+        : isNum
         ? '정해진 범위에서 숫자가 하나씩 제시돼요.<br>제시된 숫자를 <b>처음부터 순서대로 다시 입력</b>하면<br>다음 숫자가 나옵니다.'
         : isAi
             ? 'AI 와 <b>번갈아</b> 단어를 쌓습니다.<br>앞의 단어를 <b>순서대로 다시 입력</b>한 뒤 새 단어를 하나 추가하세요.<br>단어가 주제에 맞는지는 <b>심판 AI</b> 가 판정합니다.'
             : '주제를 정하고 단어를 하나씩 이어 붙여 보세요.<br>앞에서 넣은 단어를 <b>순서대로 다시 입력</b>한 뒤<br>새 단어를 하나 추가하면 됩니다.';
+
+    $('start-btn').innerText = isFriend ? '🎲 방 만들기' : '게임 시작';
+    $('my-books-btn').classList.toggle('hidden', isFriend || loadBooks().length === 0);
 
     syncLangUI();
     renderHomeStats();
@@ -469,9 +476,16 @@ async function startNewGame() {
             shakeTopic();
             return;
         }
-        // 주제가 장소인지는 AI 대결에서만 확인한다.
+        // 주제가 장소인지는 심판이 도는 모드에서만 확인한다.
         // 혼자 하는 모드는 서버 없이도 돌아가야 하고, 판정할 심판도 없다.
         if (mode === 'ai' && !(await checkTopic(value))) return;
+
+        // 친구 모드는 여기서 판을 시작하지 않고 방을 만든다.
+        // 주제 검증은 서버가 방을 만들 때 함께 한다.
+        if (mode === 'friend') {
+            await createRoom(value, lang);
+            return;
+        }
         topic = value;
     }
 
