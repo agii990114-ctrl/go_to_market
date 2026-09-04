@@ -15,6 +15,10 @@ import { judge, suggestTopics, validateTopic, generateWords, glossWords } from '
 import { checkTopicShape } from './topic.js';
 import { isRealWord } from './dictionary.js';
 import { cleanGloss } from './game.js';
+import {
+    createRoom, joinRoom, quickJoin, getRoom, startGame, submit, leaveRoom,
+    viewOf, addListener, scheduleRevealEnd, MAX_PLAYERS,
+} from './rooms.js';
 import { isDuplicate, playAiTurn } from './game.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -248,6 +252,110 @@ app.post('/api/wordbook', async (req, res, next) => {
     }
 });
 
+/* -----------------------------------------------------------
+   친구와 하기 : 방
+   로그인이 없다. 브라우저가 만든 playerId 로 사람을 가른다.
+----------------------------------------------------------- */
+app.post('/api/room/create', async (req, res, next) => {
+    try {
+        const topic = readTopic(req.body);
+        const lang = readLang(req.body);
+
+        // 혼자 할 때와 같은 관문을 통과한 주제만 쓴다
+        const shape = checkTopicShape(topic, lang);
+        if (!shape.ok) throw badRequest(shape.reason);
+        const verdict = await validateTopic(topic, lang);
+        if (!verdict.isPlace) throw badRequest(verdict.reason || '장소를 주제로 골라주세요.');
+
+        const { room, player } = createRoom({
+            hostName: req.body?.name,
+            lang,
+            topic,
+            seconds: parseInt(req.body?.seconds, 10),
+        });
+        res.json({ playerId: player.id, room: viewOf(room, player.id) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+app.post('/api/room/join', (req, res, next) => {
+    try {
+        const { room, player } = joinRoom(req.body?.code, req.body?.name);
+        res.json({ playerId: player.id, room: viewOf(room, player.id) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+app.post('/api/room/quick', (req, res, next) => {
+    try {
+        const { room, player } = quickJoin(req.body?.name);
+        res.json({ playerId: player.id, room: viewOf(room, player.id) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+app.post('/api/room/start', (req, res, next) => {
+    try {
+        const room = startGame(req.body?.code, req.body?.playerId);
+        res.json({ room: viewOf(room, req.body?.playerId) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+app.post('/api/room/submit', async (req, res, next) => {
+    try {
+        const room = await submit(req.body?.code, req.body?.playerId, req.body?.word);
+        scheduleRevealEnd(room);
+        res.json({ room: viewOf(room, req.body?.playerId) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+app.post('/api/room/leave', (req, res, next) => {
+    try {
+        leaveRoom(req.body?.code, req.body?.playerId);
+        res.json({ ok: true });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/** 방 상태를 계속 밀어 준다 */
+app.get('/api/room/stream', (req, res, next) => {
+    try {
+        const room = getRoom(req.query.code);
+        const playerId = String(req.query.playerId || '');
+
+        res.set({
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache, no-transform',
+            Connection: 'keep-alive',
+        });
+        res.flushHeaders?.();
+
+        const remove = addListener(room, playerId, res);
+
+        // 중간 장비가 조용한 연결을 끊지 않도록 주기적으로 찔러 준다
+        const ping = setInterval(() => {
+            try { res.write(': ping\n\n'); } catch (e) { /* 끊김 */ }
+        }, 20000);
+
+        req.on('close', () => {
+            clearInterval(ping);
+            remove();
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+app.get('/api/room/limits', (req, res) => res.json({ maxPlayers: MAX_PLAYERS }));
+
 app.use((err, req, res, next) => {
     const status = err.status || err.statusCode || 500;
     if (status >= 500) console.error('[api]', err);
@@ -256,7 +364,7 @@ app.use((err, req, res, next) => {
     if (status === 401) message = 'API 키가 올바르지 않습니다. .env 파일을 확인해주세요.';
     if (status === 429) message = '요청이 너무 잦습니다. 잠시 뒤 다시 시도해주세요.';
 
-    res.status(status).json({ error: message });
+    res.status(status).json({ error: message, warn: Boolean(err.warn) });
 });
 
 app.listen(PORT, () => {
