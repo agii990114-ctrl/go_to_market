@@ -1501,7 +1501,11 @@
         <div class="reveal-card hidden" id="room-reveal">
             <div class="reveal-cap" id="room-reveal-cap">새 단어</div>
             <div class="reveal-word" id="room-reveal-word"></div>
-            <div class="reveal-note">이 단어도 외워야 해요.</div>
+            <div class="reveal-note" id="room-reveal-note">이 단어도 외워야 해요.</div>
+            <div id="reveal-timer-wrap" class="hidden" style="width:100%">
+                <div class="timer-track"><div id="reveal-timer-fill"></div></div>
+            </div>
+            <button class="btn btn-primary" id="reveal-ok" onclick="ackReveal()">✅ 확인했어요</button>
         </div>
 
         <div class="input-row" id="room-input-row">
@@ -1522,7 +1526,9 @@
             <div class="modal-reason" id="room-result-note"></div>
             <div class="word-list" id="room-result-words"></div>
             <div class="modal-actions">
-                <button class="btn btn-primary" onclick="leaveRoom()">🏠 처음으로</button>
+                <button class="btn btn-primary hidden" id="room-again-btn" onclick="restartRoomGame()">🔄 같은 방에서 한 판 더</button>
+                <div class="room-note hidden" id="room-again-note">방장이 다시 시작하기를 기다리는 중…</div>
+                <button class="btn" onclick="leaveRoom()">🏠 나가기</button>
             </div>
         </div>
     </div>

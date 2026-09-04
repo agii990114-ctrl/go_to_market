@@ -18,7 +18,10 @@ import { normalize } from './game.js';
 const MAX_PLAYERS = 10;
 const CODE_LENGTH = 6;
 const IDLE_MS = 30 * 60 * 1000;      // 이만큼 조용하면 방을 치운다
-const REVEAL_MS = 4000;              // 새 단어를 보여주는 시간
+// 새 낱말을 보여주는 동안에는 차례 시간이 흐르지 않는다.
+// 남이 낸 단어를 외우는 시간에 내 제한 시간이 깎이면 불공정하다.
+// 살아 있는 사람이 모두 확인을 누르거나, 이 시간이 다 되면 다음 차례가 시작된다.
+const REVEAL_CAP_MS = 60 * 1000;     // 제한 시간을 끈 방에서도 무한정 멈춰 있지 않게
 
 const rooms = new Map();   // code -> room
 
@@ -54,6 +57,9 @@ export function createRoom({ hostName, lang, topic, seconds }) {
         deadline: 0,
         timer: null,
         lastAdded: null,
+        revealAck: new Set(),
+        revealDeadline: 0,
+        revealTimer: null,
         lastEvent: null,
         winnerId: null,
         listeners: new Set(),
@@ -124,6 +130,47 @@ export function startGame(code, playerId) {
     return room;
 }
 
+/**
+ * 판이 끝난 뒤 같은 방에서 다시 시작한다.
+ * 방을 유지해야 코드를 다시 알려주고 모이는 수고가 없다.
+ */
+export function restartGame(code, playerId) {
+    const room = getRoom(code);
+    if (room.hostId !== playerId) throw fail('방장만 다시 시작할 수 있어요.', 403);
+    if (room.status !== 'done') throw fail('아직 판이 끝나지 않았어요.', 409);
+
+    clearTimer(room);
+    clearRevealTimer(room);
+
+    room.status = 'waiting';
+    room.entries = [];
+    room.turnIndex = 0;
+    room.cursor = 0;
+    room.deadline = 0;
+    room.revealDeadline = 0;
+    room.lastAdded = null;
+    room.lastEvent = null;
+    room.winnerId = null;
+    room.revealAck = new Set();
+    for (const p of room.players) p.alive = true;
+
+    touch(room);
+    broadcast(room);
+    return room;
+}
+
+/** 방장이 주제를 바꾼다 (대기 중에만) */
+export function setTopic(code, playerId, topic, lang) {
+    const room = getRoom(code);
+    if (room.hostId !== playerId) throw fail('방장만 주제를 바꿀 수 있어요.', 403);
+    if (room.status !== 'waiting') throw fail('대기 중일 때만 바꿀 수 있어요.', 409);
+    room.topic = topic;
+    if (lang) room.lang = lang === 'en' ? 'en' : 'ko';
+    touch(room);
+    broadcast(room);
+    return room;
+}
+
 function currentPlayer(room) {
     return room.players[room.turnIndex] || null;
 }
@@ -175,11 +222,67 @@ export async function submit(code, playerId, word, { useJudge = true } = {}) {
 
     room.entries.push({ word: value, by: player.id });
     room.cursor = 0;
-    room.lastAdded = { word: value, by: player.id, name: player.name, until: Date.now() + REVEAL_MS };
-    nextTurn(room);
+    room.lastAdded = { word: value, by: player.id, name: player.name };
+    if (finishIfOver(room)) return room;
+    advanceTurnIndex(room);
+    beginReveal(room);
     touch(room);
     broadcast(room);
     return room;
+}
+
+/**
+ * 새 낱말을 모두에게 보여주는 단계.
+ * 이 동안에는 차례 시간이 흐르지 않는다.
+ */
+function beginReveal(room) {
+    clearTimer(room);
+    clearRevealTimer(room);
+
+    room.status = 'reveal';
+    room.revealAck = new Set();
+
+    const span = room.seconds ? room.seconds * 1000 : REVEAL_CAP_MS;
+    room.revealDeadline = Date.now() + span;
+    room.deadline = 0;
+
+    room.revealTimer = setTimeout(() => endReveal(room), span);
+}
+
+/** 살아 있는 사람이 모두 확인했으면 바로 넘어간다 */
+export function ackReveal(code, playerId) {
+    const room = getRoom(code);
+    if (room.status !== 'reveal') return room;
+
+    const player = room.players.find(p => p.id === playerId);
+    if (!player) throw fail('그 방에 없는 사람이에요.', 403);
+
+    room.revealAck.add(playerId);
+    touch(room);
+
+    const alive = room.players.filter(p => p.alive);
+    if (alive.every(p => room.revealAck.has(p.id))) endReveal(room);
+    else broadcast(room);
+
+    return room;
+}
+
+function endReveal(room) {
+    if (room.status !== 'reveal') return;
+    clearRevealTimer(room);
+
+    room.status = 'playing';
+    room.lastAdded = null;
+    room.revealDeadline = 0;
+    startTurnTimer(room);
+    broadcast(room);
+}
+
+function clearRevealTimer(room) {
+    if (room.revealTimer) {
+        clearTimeout(room.revealTimer);
+        room.revealTimer = null;
+    }
 }
 
 /** 탈락시키고 다음 사람에게 넘긴다 */
@@ -198,17 +301,32 @@ function eliminate(room, player, detail) {
 
 function nextTurn(room) {
     clearTimer(room);
+    clearRevealTimer(room);
 
+    if (finishIfOver(room)) return;
+    advanceTurnIndex(room);
+    room.status = 'playing';
+    startTurnTimer(room);
+}
+
+/** 한 명 이하만 남았으면 판을 끝낸다 */
+function finishIfOver(room) {
     const alive = room.players.filter(p => p.alive);
-    if (alive.length <= 1) {
-        room.status = 'done';
-        room.winnerId = alive[0]?.id || null;
-        room.cursor = 0;
-        broadcast(room);
-        return;
-    }
+    if (alive.length > 1) return false;
 
-    // 다음 살아 있는 사람으로
+    clearTimer(room);
+    clearRevealTimer(room);
+    room.status = 'done';
+    room.winnerId = alive[0]?.id || null;
+    room.cursor = 0;
+    room.lastAdded = null;
+    room.deadline = 0;
+    room.revealDeadline = 0;
+    broadcast(room);
+    return true;
+}
+
+function advanceTurnIndex(room) {
     let i = room.turnIndex;
     for (let n = 0; n < room.players.length; n++) {
         i = (i + 1) % room.players.length;
@@ -216,7 +334,6 @@ function nextTurn(room) {
     }
     room.turnIndex = i;
     room.cursor = 0;
-    startTurnTimer(room);
 }
 
 /* -----------------------------------------------------------
@@ -298,7 +415,8 @@ setInterval(() => {
  * 단어 목록은 넣지 않는다. 방금 나온 한 낱말만, 그것도 잠깐만 넣는다.
  */
 export function viewOf(room, forPlayerId) {
-    const revealing = room.lastAdded && room.lastAdded.until > Date.now();
+    const revealing = room.status === 'reveal' && room.lastAdded;
+    const aliveCount = room.players.filter(p => p.alive).length;
 
     return {
         code: room.code,
@@ -314,11 +432,17 @@ export function viewOf(room, forPlayerId) {
             alive: p.alive,
             isYou: p.id === forPlayerId,
         })),
-        turnPlayerId: room.status === 'playing' ? currentPlayer(room)?.id || null : null,
+        // 공개 중에도 다음 차례가 누구인지 보여준다. 미리 마음의 준비를 하도록.
+        turnPlayerId: (room.status === 'playing' || room.status === 'reveal')
+            ? currentPlayer(room)?.id || null : null,
         wordCount: room.entries.length,
         cursor: room.cursor,
         deadline: room.deadline || 0,
         lastAdded: revealing ? { word: room.lastAdded.word, name: room.lastAdded.name } : null,
+        revealDeadline: revealing ? room.revealDeadline : 0,
+        revealAcked: revealing ? room.revealAck.has(forPlayerId) : false,
+        revealAckCount: revealing ? room.revealAck.size : 0,
+        aliveCount,
         lastEvent: room.lastEvent,
         winnerId: room.winnerId,
         // 판이 끝난 뒤에야 전체를 공개한다

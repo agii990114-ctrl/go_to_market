@@ -17,7 +17,7 @@ import { isRealWord } from './dictionary.js';
 import { cleanGloss } from './game.js';
 import {
     createRoom, joinRoom, quickJoin, getRoom, startGame, submit, leaveRoom,
-    viewOf, addListener, scheduleRevealEnd, MAX_PLAYERS,
+    ackReveal, restartGame, setTopic, viewOf, addListener, MAX_PLAYERS,
 } from './rooms.js';
 import { isDuplicate, playAiTurn } from './game.js';
 
@@ -309,7 +309,43 @@ app.post('/api/room/start', (req, res, next) => {
 app.post('/api/room/submit', async (req, res, next) => {
     try {
         const room = await submit(req.body?.code, req.body?.playerId, req.body?.word);
-        scheduleRevealEnd(room);
+        res.json({ room: viewOf(room, req.body?.playerId) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/** 새 낱말을 다 봤다고 알린다. 살아 있는 사람이 모두 누르면 바로 다음 차례로 간다. */
+app.post('/api/room/ack', (req, res, next) => {
+    try {
+        const room = ackReveal(req.body?.code, req.body?.playerId);
+        res.json({ room: viewOf(room, req.body?.playerId) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/** 같은 방에서 한 판 더 */
+app.post('/api/room/restart', (req, res, next) => {
+    try {
+        const room = restartGame(req.body?.code, req.body?.playerId);
+        res.json({ room: viewOf(room, req.body?.playerId) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/** 다시 하기 전에 주제를 바꾼다 */
+app.post('/api/room/topic', async (req, res, next) => {
+    try {
+        const topic = readTopic(req.body);
+        const lang = readLang(req.body);
+        const shape = checkTopicShape(topic, lang);
+        if (!shape.ok) throw badRequest(shape.reason);
+        const verdict = await validateTopic(topic, lang);
+        if (!verdict.isPlace) throw badRequest(verdict.reason || '장소를 주제로 골라주세요.');
+
+        const room = setTopic(req.body?.code, req.body?.playerId, topic, lang);
         res.json({ room: viewOf(room, req.body?.playerId) });
     } catch (err) {
         next(err);

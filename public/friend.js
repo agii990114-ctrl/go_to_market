@@ -162,6 +162,29 @@ async function submitRoomWord() {
     }
 }
 
+/** 새 낱말을 다 봤다고 알린다 */
+async function ackReveal() {
+    if (!room || room.status !== 'reveal' || room.revealAcked) return;
+    $('reveal-ok').disabled = true;
+    try {
+        await api('/api/room/ack', { code: myCode, playerId: myId });
+    } catch (err) {
+        roomFeedback(err.message, 'warn');
+    } finally {
+        $('reveal-ok').disabled = false;
+    }
+}
+
+/** 같은 방에서 한 판 더 */
+async function restartRoomGame() {
+    try {
+        await api('/api/room/restart', { code: myCode, playerId: myId });
+        $('room-result').classList.remove('open');
+    } catch (err) {
+        roomFeedback(err.message, 'warn');
+    }
+}
+
 async function leaveRoom() {
     if (myCode && myId) {
         try { await api('/api/room/leave', { code: myCode, playerId: myId }); } catch (e) { /* 이미 없는 방 */ }
@@ -183,6 +206,12 @@ function render() {
     if (!room) return;
 
     const waiting = room.status === 'waiting';
+    if (waiting) {
+        // 방장이 다시 시작하면 모두의 결과 화면이 닫히고 대기실로 돌아온다
+        $('room-result').classList.remove('open');
+        lastSeenEvent = null;
+        roomFeedback('');
+    }
     $('room-screen').classList.toggle('hidden', !waiting);
     $('room-play').classList.toggle('hidden', waiting);
 
@@ -215,32 +244,46 @@ function renderPlaying() {
     $('room-play-players').innerHTML = playerRows();
     $('room-index').innerText = room.cursor + 1;
 
+    const revealing = room.status === 'reveal';
     const myTurn = room.turnPlayerId === myId;
     const turnName = room.players.find(p => p.id === room.turnPlayerId)?.name || '-';
     const isNewWord = room.cursor >= room.wordCount;
 
-    $('room-hint').classList.toggle('is-new', myTurn && isNewWord);
+    $('room-hint').classList.toggle('is-new', myTurn && isNewWord && !revealing);
     $('room-hint').innerText = room.status === 'done'
         ? '게임이 끝났어요'
-        : myTurn
-            ? (isNewWord
-                ? (room.wordCount === 0 ? '✨ 첫 단어를 입력하세요' : '✨ 새 단어를 추가하세요')
-                : '기억을 떠올려 입력하세요')
-            : turnName + ' 님의 차례예요';
+        : revealing
+            ? (myTurn ? '다음은 내 차례예요' : turnName + ' 님의 차례가 곧 시작돼요')
+            : myTurn
+                ? (isNewWord
+                    ? (room.wordCount === 0 ? '✨ 첫 단어를 입력하세요' : '✨ 새 단어를 추가하세요')
+                    : '기억을 떠올려 입력하세요')
+                : turnName + ' 님의 차례예요';
 
-    // 새 낱말 공개 — 모두가 외워야 하므로 잠깐 크게 보여준다
+    // 새 낱말 공개 — 모두가 외워야 하므로 크게 보여준다.
+    // 이 동안에는 차례 시간이 흐르지 않는다. 남이 낸 단어를 외우는 시간에
+    // 내 제한 시간이 깎이면 불공정하기 때문이다.
     const reveal = room.lastAdded;
-    $('room-reveal').classList.toggle('hidden', !reveal);
-    if (reveal) {
+    $('room-reveal').classList.toggle('hidden', !revealing || !reveal);
+    if (revealing && reveal) {
         $('room-reveal-cap').innerText = reveal.name + ' 님이 추가한 단어';
         $('room-reveal-word').innerText = reveal.word;
+        $('room-reveal-note').innerText = room.revealAcked
+            ? '다른 사람을 기다리는 중…'
+            : '이 단어도 외워야 해요. 다 외웠으면 확인을 누르세요.';
+
+        const ok = $('reveal-ok');
+        ok.disabled = room.revealAcked;
+        ok.innerText = room.revealAcked
+            ? '✅ 확인함 (' + room.revealAckCount + '/' + room.aliveCount + ')'
+            : '✅ 확인했어요';
+        if (!room.revealAcked && document.activeElement !== ok) ok.focus();
     }
 
-    // 내 차례가 아니면 입력칸을 감춘다. 남의 차례에 칠 일이 없다.
-    $('room-input-row').classList.toggle('hidden', !myTurn || room.status !== 'playing');
-    if (myTurn && room.status === 'playing' && document.activeElement !== $('room-input')) {
-        $('room-input').focus();
-    }
+    // 내 차례가 아니거나 공개 중이면 입력칸을 감춘다
+    const canType = myTurn && room.status === 'playing';
+    $('room-input-row').classList.toggle('hidden', !canType);
+    if (canType && document.activeElement !== $('room-input')) $('room-input').focus();
 
     showRoomEvent();
     syncRoomTimer();
@@ -294,25 +337,35 @@ function roomFeedback(msg, type) {
 ----------------------------------------- */
 function syncRoomTimer() {
     stopRoomTimer();
-    const wrap = $('room-timer-wrap');
 
-    if (!room.deadline || room.status !== 'playing') {
-        wrap.classList.add('hidden');
-        return;
-    }
-    wrap.classList.remove('hidden');
+    const turnOn = room.status === 'playing' && room.deadline > 0;
+    const revealOn = room.status === 'reveal' && room.revealDeadline > 0;
+
+    $('room-timer-wrap').classList.toggle('hidden', !turnOn);
+    $('reveal-timer-wrap').classList.toggle('hidden', !revealOn);
+
+    if (!turnOn && !revealOn) return;
     drawRoomTimer();
     roomTimer = setInterval(drawRoomTimer, 100);
 }
 
 function drawRoomTimer() {
-    if (!room || !room.deadline) return stopRoomTimer();
-    const remain = Math.max(0, room.deadline - Date.now());
-    const ratio = remain / (room.seconds * 1000);
+    if (!room) return stopRoomTimer();
 
+    // 공개 시간은 방에서 정한 제한 시간과 같다
+    if (room.status === 'reveal' && room.revealDeadline) {
+        const span = (room.seconds || 60) * 1000;
+        const remain = Math.max(0, room.revealDeadline - Date.now());
+        $('reveal-timer-fill').style.width = (remain / span * 100) + '%';
+        return;
+    }
+
+    if (room.status !== 'playing' || !room.deadline) return stopRoomTimer();
+
+    const remain = Math.max(0, room.deadline - Date.now());
     const fill = $('room-timer-fill');
-    fill.style.width = (ratio * 100) + '%';
-    fill.classList.toggle('urgent', ratio <= 0.3);
+    fill.style.width = (remain / (room.seconds * 1000) * 100) + '%';
+    fill.classList.toggle('urgent', remain <= room.seconds * 300);
     $('room-timer-text').innerText = (remain / 1000).toFixed(1);
 }
 
@@ -343,6 +396,8 @@ function renderResult() {
             + escapeHtml(w.word) + '<span class="gloss">' + escapeHtml(w.by) + '</span></div>').join('')
         : '<div class="empty-note">쌓은 단어가 없어요.</div>';
 
+    $('room-again-btn').classList.toggle('hidden', !room.youAreHost);
+    $('room-again-note').classList.toggle('hidden', room.youAreHost);
     $('room-result').classList.add('open');
 }
 
@@ -355,6 +410,15 @@ $('room-input').addEventListener('keydown', function (e) {
         if (e.isComposing || e.keyCode === 229) return;
         submitRoomWord();
     }
+});
+
+// 공개 화면에는 입력칸이 없어 엔터가 갈 곳이 없다. 엔터를 확인으로 받는다.
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    if (!room || room.status !== 'reveal' || room.revealAcked) return;
+    if (e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    ackReveal();
 });
 
 $('join-code').addEventListener('keydown', function (e) {
